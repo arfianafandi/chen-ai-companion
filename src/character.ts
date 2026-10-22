@@ -6,8 +6,6 @@ import {
   type ThreeMmdModel, 
   type ThreeMmdAnimation 
 } from '@yohawing/three-mmd-loader';
-// @ts-ignore - Exported at runtime in JS module
-import { readRuntimeExternalPhysics } from '@yohawing/three-mmd-loader/runtime';
 import type { EmotionType, BodyPart } from './types';
 import { tts, chenVoice, danceAudio } from './audio';
 import type { TrainedMotion, MotionPoseData } from './motionTrainer';
@@ -33,6 +31,7 @@ export class ChenCharacter {
   public currentDanceId: string | null = null;
   public danceTime = 0;
   private cachedAnimations = new Map<string, ThreeMmdAnimation>();
+  private savedExternalPhysicsData: any = null;
 
   // Performance & Quality State
   public outlineEnabled = false; // Default false for smooth 60 FPS (toggleable)
@@ -172,19 +171,25 @@ export class ChenCharacter {
 
     // 3. Bind mesh & runtime external physics data so Bullet WASM simulates all 310 rigid bodies!
     const runtime = this.model.runtime as any;
-    if (this.mesh && runtime) {
-      runtime.mesh = this.mesh;
-      if (physicsBackend) {
-        try {
-          runtime.externalPhysicsData = readRuntimeExternalPhysics(this.mesh);
-          runtime.resetPhysicsState?.();
-          runtime.previousEvaluateSeconds = 0;
-          this.lastPhysicsTime = 0;
-          const bodyCount = runtime.externalPhysicsData?.rigidBodies?.length || 0;
-          console.log(`⚡ Bullet physics attached to runtime: ${bodyCount} rigid bodies active!`);
-        } catch (e) {
-          console.warn('Failed to bind external physics data:', e);
-        }
+    if (this.mesh && runtime && physicsBackend) {
+      try {
+        const defaultMotionUrl = `${import.meta.env.BASE_URL}motions/pokedance.vmd`;
+        const anim = await this.loader.loadAnimation(defaultMotionUrl);
+        this.cachedAnimations.set(defaultMotionUrl, anim);
+        this.model.setAnimation(anim);
+        this.savedExternalPhysicsData = runtime.externalPhysicsData;
+        // Detach dance clip so character stands in organic idle pose with physics active
+        runtime.wasmClip = undefined;
+        runtime.mmdAnimation = undefined;
+        runtime.mesh = this.mesh;
+        runtime.externalPhysicsData = this.savedExternalPhysicsData;
+        runtime.resetPhysicsState?.();
+        runtime.previousEvaluateSeconds = 0;
+        this.lastPhysicsTime = 0;
+        const bodyCount = this.savedExternalPhysicsData?.rigidBodies?.length || 0;
+        console.log(`⚡ Bullet physics initialized via runtime: ${bodyCount} rigid bodies active!`);
+      } catch (e) {
+        console.warn('Initial physics animation setup warning:', e);
       }
     }
 
@@ -415,12 +420,15 @@ export class ChenCharacter {
     this.lastPhysicsTime = 0;
     danceAudio.stop();
     if (this.model) {
-      this.model.setAnimation(undefined as unknown as ThreeMmdAnimation);
       const runtime = this.model.runtime as any;
-      if (this.mesh && runtime) {
+      if (runtime) {
+        runtime.wasmClip = undefined;
+        runtime.mmdAnimation = undefined;
+        if (this.savedExternalPhysicsData) {
+          runtime.externalPhysicsData = this.savedExternalPhysicsData;
+        }
         runtime.mesh = this.mesh;
         try {
-          runtime.externalPhysicsData = readRuntimeExternalPhysics(this.mesh);
           runtime.resetPhysicsState?.();
           runtime.previousEvaluateSeconds = 0;
           this.lastPhysicsTime = 0;
@@ -483,7 +491,11 @@ export class ChenCharacter {
     if (!this.model || !this.mesh || !this.physicsEnabled) return;
 
     const runtime = this.model.runtime as any;
-    if (!runtime || typeof runtime.stepExternalPhysics !== 'function' || !runtime.externalPhysicsData) return;
+    if (!runtime || typeof runtime.stepExternalPhysics !== 'function') return;
+    if (!runtime.externalPhysicsData && this.savedExternalPhysicsData) {
+      runtime.externalPhysicsData = this.savedExternalPhysicsData;
+    }
+    if (!runtime.externalPhysicsData) return;
 
     // Safety: ensure mesh world matrix is updated from procedural bones
     this.mesh.updateWorldMatrix(false, true);
