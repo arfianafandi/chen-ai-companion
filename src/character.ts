@@ -6,6 +6,8 @@ import {
   type ThreeMmdModel, 
   type ThreeMmdAnimation 
 } from '@yohawing/three-mmd-loader';
+// @ts-ignore - Exported at runtime in JS module
+import { readRuntimeExternalPhysics } from '@yohawing/three-mmd-loader/runtime';
 import type { EmotionType, BodyPart } from './types';
 import { tts, chenVoice, danceAudio } from './audio';
 import type { TrainedMotion, MotionPoseData } from './motionTrainer';
@@ -131,7 +133,10 @@ export class ChenCharacter {
           const bulletModule = await factory({
             locateFile: (file: string) => `${import.meta.env.BASE_URL}${file}`,
           });
-          physicsBackend = createCustomBulletMmdPhysicsBackend(bulletModule);
+          physicsBackend = createCustomBulletMmdPhysicsBackend(bulletModule, {
+            maxSubSteps: 2,
+            fixedTimeStep: 1 / 60,
+          });
           console.log('⚡ Bullet WASM MMD Physics Engine active (310 rigid bodies & 455 spring joints)!');
         }
       }
@@ -171,9 +176,7 @@ export class ChenCharacter {
       runtime.mesh = this.mesh;
       if (physicsBackend) {
         try {
-          if (typeof runtime.prepareAnimationTarget === 'function') {
-            runtime.prepareAnimationTarget(this.mesh);
-          }
+          runtime.externalPhysicsData = readRuntimeExternalPhysics(this.mesh);
           runtime.resetPhysicsState?.();
           runtime.previousEvaluateSeconds = 0;
           this.lastPhysicsTime = 0;
@@ -417,9 +420,7 @@ export class ChenCharacter {
       if (this.mesh && runtime) {
         runtime.mesh = this.mesh;
         try {
-          if (typeof runtime.prepareAnimationTarget === 'function') {
-            runtime.prepareAnimationTarget(this.mesh);
-          }
+          runtime.externalPhysicsData = readRuntimeExternalPhysics(this.mesh);
           runtime.resetPhysicsState?.();
           runtime.previousEvaluateSeconds = 0;
           this.lastPhysicsTime = 0;

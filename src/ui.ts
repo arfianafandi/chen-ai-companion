@@ -100,20 +100,20 @@ export class UIManager {
             <span class="preset-label performance" id="preset-badge">RINGAN</span>
           </button>
           <div class="cam-presets">
-            <button class="cam-btn active" data-cam="chat" title="Portrait Cam">💬 Chat</button>
-            <button class="cam-btn" data-cam="face" title="Face Waifu Cam">👤 Face</button>
-            <button class="cam-btn" data-cam="full" title="Full Body Dance Cam">💃 Full</button>
+            <button class="cam-btn active" data-cam="chat" title="Portrait Cam"><span class="cam-icon">💬</span><span class="cam-text"> Chat</span></button>
+            <button class="cam-btn" data-cam="face" title="Face Waifu Cam"><span class="cam-icon">👤</span><span class="cam-text"> Face</span></button>
+            <button class="cam-btn" data-cam="full" title="Full Body Dance Cam"><span class="cam-icon">💃</span><span class="cam-text"> Full</span></button>
           </div>
           <button class="icon-btn" id="studio-btn" title="Motion & Expression Studio">
-            🎨 Studio
+            <span>🎨</span><span class="btn-text-full"> Studio</span>
           </button>
           <button class="icon-btn neural-core-btn" id="neural-btn" title="AI Neural Matrix (Latih Respon & Motion Mandiri)">
-            🧠 Neural Core
+            <span>🧠</span><span class="btn-text-full"> Neural Core</span>
           </button>
-          <button class="icon-btn" id="settings-btn" title="AI & Voice Settings">
+          <button class="icon-btn icon-only" id="settings-btn" title="AI & Voice Settings">
             ⚙️
           </button>
-          <button class="icon-btn" id="hide-ui-btn" title="Hide UI (Clean View)">
+          <button class="icon-btn icon-only" id="hide-ui-btn" title="Hide UI (Clean View)">
             👁️
           </button>
         </div>
@@ -130,6 +130,21 @@ export class UIManager {
 
       <!-- BOTTOM CHAT DECK (Grok Ani style) -->
       <div class="hud-bottom-deck" id="hud-bottom-deck">
+        <!-- 1. Chat History Drawer (Opens upward above chips & input) -->
+        <div class="chat-history-drawer" id="chat-history-drawer" style="display: none;">
+          <div class="chat-drawer-header">
+            <span>📜 TRANSMISSION LOG</span>
+            <button class="chat-drawer-close" id="close-chat-drawer">&times;</button>
+          </div>
+          <div class="messages-container" id="messages-container"></div>
+        </div>
+
+        <!-- 2. Chat History Toggle Pill -->
+        <div class="chat-drawer-toggle" id="toggle-chat-history">
+          <span id="chat-toggle-text">Show Chat History (0) ▲</span>
+        </div>
+
+        <!-- 3. Quick Chips -->
         <div class="quick-chips">
           <button class="chip-btn" data-action="headpat">💖 Headpat</button>
           <button class="chip-btn" data-action="praise">✨ You're Cute</button>
@@ -138,6 +153,7 @@ export class UIManager {
           <button class="chip-btn" data-action="pokedance">💃 Poke Dance!</button>
         </div>
 
+        <!-- 4. Input Row -->
         <div class="chat-input-row">
           <button class="mic-btn" id="mic-btn" title="Voice Input (STT)">
             <span class="mic-icon">🎙️</span>
@@ -151,14 +167,6 @@ export class UIManager {
           <button class="send-btn" id="send-btn">
             Send ➜
           </button>
-        </div>
-
-        <div class="chat-drawer-toggle" id="toggle-chat-history">
-          <span id="chat-toggle-text">Show Chat History (0) ▲</span>
-        </div>
-
-        <div class="chat-history-drawer" id="chat-history-drawer" style="display: none;">
-          <div class="messages-container" id="messages-container"></div>
         </div>
       </div>
 
@@ -817,14 +825,26 @@ export class UIManager {
     // 6. Chat History Drawer Toggle
     const toggleChat = this.container.querySelector('#toggle-chat-history') as HTMLElement;
     const chatDrawer = this.container.querySelector('#chat-history-drawer') as HTMLElement;
+    const closeChatDrawer = this.container.querySelector('#close-chat-drawer') as HTMLElement;
+
+    const setChatDrawerOpen = (open: boolean) => {
+      chatDrawer.style.display = open ? 'flex' : 'none';
+      const count = this.container.querySelectorAll('.message-bubble').length;
+      this.container.querySelector('#chat-toggle-text')!.textContent = open 
+        ? `Hide Chat History (${count}) ▼`
+        : `Show Chat History (${count}) ▲`;
+    };
+
     toggleChat.addEventListener('click', () => {
       sfx.playClick();
       const isOpen = chatDrawer.style.display !== 'none';
-      chatDrawer.style.display = isOpen ? 'none' : 'block';
-      const count = this.container.querySelectorAll('.message-bubble').length;
-      this.container.querySelector('#chat-toggle-text')!.textContent = isOpen 
-        ? `Show Chat History (${count}) ▲` 
-        : `Hide Chat History (${count}) ▼`;
+      setChatDrawerOpen(!isOpen);
+    });
+
+    closeChatDrawer?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sfx.playClick();
+      setChatDrawerOpen(false);
     });
 
     // 7. Studio Drawer Toggle

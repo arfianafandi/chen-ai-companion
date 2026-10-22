@@ -76,12 +76,12 @@ export class SceneManager {
     this.keyLight.castShadow = true;
     this.keyLight.shadow.mapSize.width = 1024;
     this.keyLight.shadow.mapSize.height = 1024;
-    this.keyLight.shadow.camera.near = 0.5;
-    this.keyLight.shadow.camera.far = 60;
-    this.keyLight.shadow.camera.left = -15;
-    this.keyLight.shadow.camera.right = 15;
-    this.keyLight.shadow.camera.top = 28;
-    this.keyLight.shadow.camera.bottom = -2;
+    this.keyLight.shadow.camera.near = 1.0;
+    this.keyLight.shadow.camera.far = 45;
+    this.keyLight.shadow.camera.left = -6;
+    this.keyLight.shadow.camera.right = 6;
+    this.keyLight.shadow.camera.top = 24;
+    this.keyLight.shadow.camera.bottom = -1;
     this.keyLight.shadow.bias = -0.0004;
     this.scene.add(this.keyLight);
 

@@ -82,14 +82,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
-  background: linear-gradient(180deg, rgba(10, 14, 20, 0.9) 0%, rgba(10, 14, 20, 0) 100%);
+  gap: 8px 12px;
+  padding: 10px 18px;
+  background: linear-gradient(180deg, rgba(10, 14, 20, 0.95) 0%, rgba(10, 14, 20, 0) 100%);
+  z-index: 20;
+  flex-wrap: wrap;
 }
 
 .hud-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .brand-badge {
@@ -111,10 +115,11 @@ body {
 .operator-name {
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: 1.5px;
   color: #fff;
   text-shadow: 0 0 10px rgba(255, 230, 0, 0.3);
+  white-space: nowrap;
 }
 
 .operator-title {
@@ -122,19 +127,21 @@ body {
   font-size: 10px;
   letter-spacing: 1px;
   color: var(--ef-yellow);
+  white-space: nowrap;
 }
 
 /* AFFECTION HUD WIDGET */
 .hud-affection {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   background: var(--ef-panel-bg);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
   border: 1px solid var(--ef-panel-border);
-  padding: 8px 16px;
+  padding: 6px 14px;
   border-radius: 20px;
   box-shadow: var(--ef-shadow);
+  flex-shrink: 0;
 }
 
 .affection-header {
@@ -145,20 +152,22 @@ body {
 .level-badge {
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 1px;
   color: var(--ef-yellow);
+  white-space: nowrap;
 }
 
 .xp-text {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ef-text-dim);
+  white-space: nowrap;
 }
 
 .affection-bar-track {
-  width: 140px;
-  height: 8px;
+  width: clamp(70px, 10vw, 130px);
+  height: 7px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   overflow: hidden;
@@ -176,15 +185,16 @@ body {
 .gift-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: linear-gradient(135deg, rgba(255, 77, 109, 0.3), rgba(255, 230, 0, 0.2));
   border: 1px solid var(--ef-pink);
   color: #fff;
-  padding: 5px 12px;
+  padding: 4px 10px;
   border-radius: 14px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.2s;
 }
 
@@ -197,26 +207,33 @@ body {
 .hud-top-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .cam-presets {
-  display: flex;
+  display: inline-flex;
   background: rgba(15, 21, 30, 0.7);
   border: 1px solid var(--ef-border-dim);
   border-radius: 8px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .cam-btn {
   background: transparent;
   border: none;
   color: var(--ef-text-dim);
-  padding: 6px 12px;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .cam-btn:hover {
@@ -525,27 +542,75 @@ body {
 }
 
 .chat-drawer-toggle {
-  text-align: center;
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
   color: var(--ef-text-dim);
-  padding: 4px;
-  transition: color 0.2s;
+  background: rgba(15, 21, 30, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--ef-border-dim);
+  border-radius: 12px;
+  padding: 4px 14px;
+  transition: all 0.2s;
+  user-select: none;
 }
 
 .chat-drawer-toggle:hover {
   color: var(--ef-yellow);
+  border-color: var(--ef-yellow);
+  background: var(--ef-yellow-dim);
 }
 
 .chat-history-drawer {
+  display: flex;
+  flex-direction: column;
   background: var(--ef-panel-bg);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--ef-border-dim);
-  border-radius: 14px;
-  padding: 12px;
-  max-height: 220px;
-  overflow-y: auto;
-  box-shadow: var(--ef-shadow);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--ef-panel-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  max-height: clamp(180px, 36vh, 300px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  animation: slideUpFade 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chat-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--ef-border-dim);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--ef-yellow);
+}
+
+.chat-drawer-close {
+  background: transparent;
+  border: none;
+  color: var(--ef-text-dim);
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.chat-drawer-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .messages-container {
@@ -1709,4 +1774,139 @@ body {
   color: #64748b;
   font-size: 12px;
   padding: 24px;
+}
+
+/* ===================================================
+   RESPONSIVE LAYOUT OPTIMIZATIONS (Tablet, Mobile, Ultra-Wide)
+   =================================================== */
+
+@media (max-width: 1100px) {
+  .hud-top {
+    padding: 8px 14px;
+    gap: 8px;
+  }
+  .hud-affection {
+    padding: 5px 12px;
+  }
+  .neural-core-btn .btn-text-full {
+    display: none;
+  }
+  .neural-core-btn::after {
+    content: " Core";
+  }
+}
+
+@media (max-width: 860px) {
+  .hud-top {
+    padding: 8px 12px;
+  }
+  .operator-title {
+    display: none;
+  }
+  .xp-text {
+    display: none;
+  }
+  .hud-affection {
+    padding: 4px 10px;
+  }
+  .affection-bar-track {
+    width: 65px;
+  }
+  .cam-btn .cam-text {
+    display: none;
+  }
+  .cam-btn {
+    padding: 6px 9px;
+  }
+  #studio-btn .btn-text-full {
+    display: none;
+  }
+  .neural-core-btn::after {
+    content: "";
+  }
+  .speech-bubble {
+    top: 75px;
+    left: 12px;
+    right: 12px;
+    min-width: 0;
+    max-width: calc(100% - 24px);
+  }
+  .hud-bottom-deck {
+    width: 95%;
+    bottom: 12px;
+  }
+  .studio-drawer {
+    width: min(340px, 92vw);
+  }
+}
+
+@media (max-width: 600px) {
+  .hud-top {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .operator-name {
+    font-size: 13px;
+  }
+  .brand-badge {
+    font-size: 11px;
+    padding: 3px 6px;
+  }
+  .level-badge {
+    font-size: 10px;
+  }
+  .gift-btn {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+  .gift-btn .btn-text {
+    display: none;
+  }
+  .fps-badge-btn {
+    padding: 5px 7px;
+    font-size: 10px;
+  }
+  .preset-label {
+    display: none;
+  }
+  .icon-btn {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+  .chip-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+  .chat-input-row {
+    padding: 4px 6px;
+  }
+  .mic-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 15px;
+  }
+  .send-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  .speech-bubble {
+    top: 68px;
+    left: 8px;
+    right: 8px;
+    min-width: 0;
+    max-width: calc(100% - 16px);
+    padding: 10px 14px;
+  }
+  .modal-card {
+    padding: 14px;
+    width: 95vw;
+    max-height: 90vh;
+  }
+  .neural-tabs-bar {
+    gap: 4px;
+  }
+  .neural-tab-btn {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
 }
