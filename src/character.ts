@@ -6,7 +6,6 @@ import {
   type ThreeMmdModel, 
   type ThreeMmdAnimation 
 } from '@yohawing/three-mmd-loader';
-import { readRuntimeExternalPhysics } from '@yohawing/three-mmd-loader/runtime';
 import type { EmotionType, BodyPart } from './types';
 import { tts, chenVoice, danceAudio } from './audio';
 import type { TrainedMotion, MotionPoseData } from './motionTrainer';
@@ -172,11 +171,14 @@ export class ChenCharacter {
       runtime.mesh = this.mesh;
       if (physicsBackend) {
         try {
-          runtime.externalPhysicsData = readRuntimeExternalPhysics(this.mesh);
-          runtime.resetPhysicsState();
+          if (typeof runtime.prepareAnimationTarget === 'function') {
+            runtime.prepareAnimationTarget(this.mesh);
+          }
+          runtime.resetPhysicsState?.();
           runtime.previousEvaluateSeconds = 0;
           this.lastPhysicsTime = 0;
-          console.log(`⚡ Bullet physics attached to runtime: ${runtime.externalPhysicsData.rigidBodies.length} rigid bodies active!`);
+          const bodyCount = runtime.externalPhysicsData?.rigidBodies?.length || 0;
+          console.log(`⚡ Bullet physics attached to runtime: ${bodyCount} rigid bodies active!`);
         } catch (e) {
           console.warn('Failed to bind external physics data:', e);
         }
@@ -415,8 +417,10 @@ export class ChenCharacter {
       if (this.mesh && runtime) {
         runtime.mesh = this.mesh;
         try {
-          runtime.externalPhysicsData = readRuntimeExternalPhysics(this.mesh);
-          runtime.resetPhysicsState();
+          if (typeof runtime.prepareAnimationTarget === 'function') {
+            runtime.prepareAnimationTarget(this.mesh);
+          }
+          runtime.resetPhysicsState?.();
           runtime.previousEvaluateSeconds = 0;
           this.lastPhysicsTime = 0;
         } catch {}
