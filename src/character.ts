@@ -359,6 +359,30 @@ export class ChenCharacter {
 
   public triggerGesture(gesture: IdleGesture) {
     if (this.isDancing) return;
+
+    if (gesture === 'gentle_wave') {
+      if (structuredMotionPlayer.isPlaying) {
+        structuredMotionPlayer.stop(0.15);
+      }
+      this.currentGesture = 'gentle_wave';
+      this.activeCustomMotion = null;
+      this.previewPose = null;
+      this.gestureTimer = 0;
+      this.gestureDuration = 2.67;
+      this.gestureWeight = 1.0;
+
+      this.playStructuredMotion('gentleWave', {
+        loop: false,
+        allowLookAt: true,
+        blendDuration: 0.35,
+        onComplete: () => {
+          this.currentGesture = 'none';
+          this.gestureWeight = 0;
+        }
+      });
+      return;
+    }
+
     if (structuredMotionPlayer.isPlaying) {
       structuredMotionPlayer.stop(0.2);
     }
@@ -463,7 +487,9 @@ export class ChenCharacter {
     if (this.isDancing) {
       this.stopDance();
     }
-    this.currentGesture = 'none';
+    if (motionId !== 'gentleWave') {
+      this.currentGesture = 'none';
+    }
     this.activeCustomMotion = null;
     this.previewPose = null;
 
@@ -474,7 +500,9 @@ export class ChenCharacter {
     }
 
     try {
-      this.currentDanceId = motionId;
+      if (options?.audioUrl) {
+        this.currentDanceId = motionId;
+      }
       const data = await entry.load();
       structuredMotionPlayer.play(data, {
         loop: options?.loop ?? true,
@@ -482,7 +510,11 @@ export class ChenCharacter {
         blendDuration: options?.blendDuration ?? 0.35,
         speed: options?.speed ?? 1.0,
         onComplete: () => {
-          this.stopStructuredMotion();
+          if (options?.audioUrl) {
+            this.stopStructuredMotion();
+          } else {
+            structuredMotionPlayer.stop(0.25);
+          }
           options?.onComplete?.();
         },
       });
@@ -494,7 +526,11 @@ export class ChenCharacter {
       }
     } catch (err) {
       console.error('Failed to load structured motion:', err);
-      this.stopStructuredMotion();
+      if (options?.audioUrl) {
+        this.stopStructuredMotion();
+      } else {
+        structuredMotionPlayer.stop(0.2);
+      }
     }
   }
 
@@ -625,9 +661,7 @@ export class ChenCharacter {
       this.timeUntilNextGesture -= delta;
       if (this.timeUntilNextGesture <= 0) {
         const randomDef = IDLE_GESTURES[Math.floor(Math.random() * IDLE_GESTURES.length)];
-        this.currentGesture = randomDef.id;
-        this.gestureTimer = 0;
-        this.gestureDuration = randomDef.duration;
+        this.triggerGesture(randomDef.id);
       }
     } else if (this.currentGesture !== 'none') {
       this.gestureTimer += delta;
@@ -771,31 +805,33 @@ export class ChenCharacter {
       this.leftElbowBone.rotation.x = THREE.MathUtils.lerp(this.leftElbowBone.rotation.x, leftElbowTargetX, delta * 3.5);
       this.leftElbowBone.rotation.y = THREE.MathUtils.lerp(this.leftElbowBone.rotation.y, leftElbowTargetY, delta * 3.5);
     }
-    if (this.rightArmBone) {
-      this.rightArmBone.rotation.z = THREE.MathUtils.lerp(this.rightArmBone.rotation.z, rightArmTargetZ, delta * 3.5);
-      this.rightArmBone.rotation.x = THREE.MathUtils.lerp(this.rightArmBone.rotation.x, rightArmTargetX, delta * 3.5);
-      this.rightArmBone.rotation.y = THREE.MathUtils.lerp(this.rightArmBone.rotation.y, rightArmTargetY, delta * 3.5);
-    }
-    if (this.rightElbowBone) {
-      this.rightElbowBone.rotation.z = THREE.MathUtils.lerp(this.rightElbowBone.rotation.z, rightElbowTargetZ, delta * 3.5);
-      this.rightElbowBone.rotation.x = THREE.MathUtils.lerp(this.rightElbowBone.rotation.x, rightElbowTargetX, delta * 3.5);
-      this.rightElbowBone.rotation.y = THREE.MathUtils.lerp(this.rightElbowBone.rotation.y, rightElbowTargetY, delta * 3.5);
-    }
-    if (this.rightWristBone) {
-      this.rightWristBone.rotation.z = THREE.MathUtils.lerp(this.rightWristBone.rotation.z, rightWristTargetZ, delta * 3.5);
-      this.rightWristBone.rotation.x = THREE.MathUtils.lerp(this.rightWristBone.rotation.x, rightWristTargetX, delta * 3.5);
-    }
+    // Only apply procedural right arm and finger rotations if structured motion player is NOT driving them
+    if (!structuredMotionPlayer.isPlaying) {
+      if (this.rightArmBone) {
+        this.rightArmBone.rotation.z = THREE.MathUtils.lerp(this.rightArmBone.rotation.z, rightArmTargetZ, delta * 3.5);
+        this.rightArmBone.rotation.x = THREE.MathUtils.lerp(this.rightArmBone.rotation.x, rightArmTargetX, delta * 3.5);
+        this.rightArmBone.rotation.y = THREE.MathUtils.lerp(this.rightArmBone.rotation.y, rightArmTargetY, delta * 3.5);
+      }
+      if (this.rightElbowBone) {
+        this.rightElbowBone.rotation.z = THREE.MathUtils.lerp(this.rightElbowBone.rotation.z, rightElbowTargetZ, delta * 3.5);
+        this.rightElbowBone.rotation.x = THREE.MathUtils.lerp(this.rightElbowBone.rotation.x, rightElbowTargetX, delta * 3.5);
+        this.rightElbowBone.rotation.y = THREE.MathUtils.lerp(this.rightElbowBone.rotation.y, rightElbowTargetY, delta * 3.5);
+      }
+      if (this.rightWristBone) {
+        this.rightWristBone.rotation.z = THREE.MathUtils.lerp(this.rightWristBone.rotation.z, rightWristTargetZ, delta * 3.5);
+        this.rightWristBone.rotation.x = THREE.MathUtils.lerp(this.rightWristBone.rotation.x, rightWristTargetX, delta * 3.5);
+      }
 
-    // 3b. Natural Finger Articulation (Curled Neko Paws / Soft Hands)
-    const targetFingerCurl = Math.max(
-      (gestureOutput?.fingerCurl ?? 0) * this.gestureWeight,
-      (effectivePose?.fingerCurl ?? 0) * this.customMotionWeight
-    );
-    if (this.fingerBones.length > 0) {
-      for (const bone of this.fingerBones) {
-        // Bend finger phalanges inwards on their natural flexion axis
-        const curlAngle = targetFingerCurl * 0.42;
-        bone.rotation.z = THREE.MathUtils.lerp(bone.rotation.z, bone.name.startsWith('左') ? -curlAngle : curlAngle, delta * 5.0);
+      // 3b. Natural Finger Articulation
+      const targetFingerCurl = Math.max(
+        (gestureOutput?.fingerCurl ?? 0) * this.gestureWeight,
+        (effectivePose?.fingerCurl ?? 0) * this.customMotionWeight
+      );
+      if (this.fingerBones.length > 0) {
+        for (const bone of this.fingerBones) {
+          const curlAngle = targetFingerCurl * 0.42;
+          bone.rotation.z = THREE.MathUtils.lerp(bone.rotation.z, bone.name.startsWith('左') ? -curlAngle : curlAngle, delta * 5.0);
+        }
       }
     }
 

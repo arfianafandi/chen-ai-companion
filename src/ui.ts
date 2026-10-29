@@ -879,6 +879,9 @@ export class UIManager {
         const gesture = (e.currentTarget as HTMLElement).dataset.gesture as any;
         if (!gesture) return;
         this.chen.triggerGesture(gesture);
+        if (gesture === 'gentle_wave') {
+          this.showSpeechBubble('Halo, Administrator! Senang bertemu denganmu~ [EMOTE:happy]', 'happy');
+        }
       });
     });
 
