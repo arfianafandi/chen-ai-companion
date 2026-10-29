@@ -6,9 +6,9 @@ import type { IdleGestureDefinition } from '../types';
  */
 export const gentleWave: IdleGestureDefinition = {
   id: 'gentle_wave',
-  displayName: 'Lambaian Tangan Ramah',
-  description: 'Lambaian tangan ramah terbuka (jauh dari kepala) dengan artikulasi 15 jari, bahu, siku, dan senyuman.',
-  duration: 3.0,
+  displayName: 'Lambaian Tangan Terbuka',
+  description: 'Lambaian tangan ramah dengan telapak tangan menghadap ke depan, 15 jari terbuka anggun, dan senyuman manis.',
+  duration: 3.2,
   emotion: 'happy',
   update(ctx) {
     return {

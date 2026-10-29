@@ -36,10 +36,10 @@ export const STRUCTURED_MOTIONS: StructuredMotionEntry[] = [
   },
   {
     id: 'gentleWave',
-    name: 'Lambaian Tangan Ramah (Full 21 Bones & 15 Jari)',
-    description: 'Lambaian tangan ramah di area terbuka (jauh dari kepala) dengan artikulasi 15 jari, bahu, siku, dan senyuman.',
-    durationSeconds: 3.0,
-    totalFrames: 90,
+    name: 'Lambaian Tangan Terbuka (Full 21 Bones & 15 Jari)',
+    description: 'Lambaian tangan ramah dengan telapak tangan menghadap ke depan, 15 jari terbuka anggun, dan senyuman manis.',
+    durationSeconds: 3.2,
+    totalFrames: 96,
     load: async () => (await import('./gentleWave')).default,
   },
 ];
