@@ -196,9 +196,6 @@ export class UIManager {
             <button class="gesture-btn" data-gesture="thinking_pose">🤔 Berpikir</button>
             <button class="gesture-btn" data-gesture="cute_nod">✨ Mengangguk Manis</button>
             <button class="gesture-btn" data-gesture="stretch_relax">🍃 Santai / Rileks</button>
-            <button class="gesture-btn" data-gesture="pokedance_bounce">🎵 Poke Bounce & Sway</button>
-            <button class="gesture-btn" data-gesture="playful_neko">🐾 Playful Neko Paws</button>
-            <button class="gesture-btn" data-gesture="idol_cheer">🌟 Idol Cheer Support</button>
           </div>
         </div>
 
@@ -874,50 +871,14 @@ export class UIManager {
       });
     });
 
-    // 9b. Gesture Trigger Buttons (Anime Motions & Full VMD Datasets)
+    // 9b. Gesture Trigger Buttons (Natural Character Gestures)
     const gestureBtns = this.container.querySelectorAll('.gesture-btn');
     gestureBtns.forEach(b => {
       b.addEventListener('click', (e) => {
         sfx.playClick();
         const gesture = (e.currentTarget as HTMLElement).dataset.gesture as any;
         if (!gesture) return;
-
-        if (gesture === 'pokedance_bounce') {
-          // Play authentic full Poke Dance keyframe motion (195 bones) with cursor look-at
-          this.chen.playStructuredMotion('pokedance', {
-            loop: false,
-            allowLookAt: true,
-            blendDuration: 0.35,
-            onComplete: () => {
-              this.showSpeechBubble('Poke Dance groove complete! [EMOTE:happy]', 'happy');
-            }
-          });
-          this.showSpeechBubble('Menarikan gerakan otentik Poke Dance (195 tulang)! 🎵', 'happy');
-        } else if (gesture === 'playful_neko') {
-          // Play authentic full Yurusite Neko keyframe motion (244 bones, 30 finger joints)
-          this.chen.playStructuredMotion('yurusiteNeko', {
-            loop: false,
-            allowLookAt: true,
-            blendDuration: 0.35,
-            onComplete: () => {
-              this.showSpeechBubble('Nyaa~ did you like my cat paws, Administrator? [EMOTE:blush]', 'blush');
-            }
-          });
-          this.showSpeechBubble('Menarikan gerakan otentik Yurusite Neko (244 tulang & 30 jari)! 🐾', 'happy');
-        } else if (gesture === 'idol_cheer') {
-          // Play authentic full Michi no Timothy keyframe motion (319 bones) with active look-at
-          this.chen.playStructuredMotion('michinoTimothy', {
-            loop: false,
-            allowLookAt: true,
-            blendDuration: 0.35,
-            onComplete: () => {
-              this.showSpeechBubble('Always giving my 100% support for you! [EMOTE:happy]', 'happy');
-            }
-          });
-          this.showSpeechBubble('Sorak semangat idol otentik Michi no Timothy (319 tulang)! 🌟', 'happy');
-        } else {
-          this.chen.triggerGesture(gesture);
-        }
+        this.chen.triggerGesture(gesture);
       });
     });
 

@@ -116,10 +116,7 @@ export type IdleGesture =
   | 'shy_glance' 
   | 'thinking_pose' 
   | 'cute_nod' 
-  | 'stretch_relax'
-  | 'pokedance_bounce'
-  | 'playful_neko'
-  | 'idol_cheer';
+  | 'stretch_relax';
 
 export interface IdleGestureContext {
   timer: number;

@@ -624,22 +624,10 @@ export class ChenCharacter {
     if (this.currentGesture === 'none' && !this.activeCustomMotion && !this.previewPose && !structuredMotionPlayer.isPlaying) {
       this.timeUntilNextGesture -= delta;
       if (this.timeUntilNextGesture <= 0) {
-        // Occasionally trigger an authentic structured motion (Poke Dance sway, Neko paws, or Timothy idol cheer)
-        if (Math.random() < 0.35) {
-          const structuredIds = ['pokedance', 'yurusiteNeko', 'michinoTimothy'];
-          const picked = structuredIds[Math.floor(Math.random() * structuredIds.length)];
-          this.playStructuredMotion(picked, {
-            loop: false,
-            allowLookAt: true,
-            blendDuration: 0.45,
-          });
-          this.timeUntilNextGesture = 6.0 + Math.random() * 5.0;
-        } else {
-          const randomDef = IDLE_GESTURES[Math.floor(Math.random() * IDLE_GESTURES.length)];
-          this.currentGesture = randomDef.id;
-          this.gestureTimer = 0;
-          this.gestureDuration = randomDef.duration;
-        }
+        const randomDef = IDLE_GESTURES[Math.floor(Math.random() * IDLE_GESTURES.length)];
+        this.currentGesture = randomDef.id;
+        this.gestureTimer = 0;
+        this.gestureDuration = randomDef.duration;
       }
     } else if (this.currentGesture !== 'none') {
       this.gestureTimer += delta;
@@ -650,7 +638,7 @@ export class ChenCharacter {
       if (this.gestureTimer >= this.gestureDuration) {
         this.currentGesture = 'none';
         this.gestureWeight = 0;
-        this.timeUntilNextGesture = 2.5 + Math.random() * 4.0; // Next automatic gesture every 2.5-6.5s!
+        this.timeUntilNextGesture = 3.5 + Math.random() * 4.0; // Next automatic gesture every 3.5-7.5s
       }
     }
 

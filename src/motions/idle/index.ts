@@ -7,9 +7,6 @@ import { shyGlance } from './shyGlance';
 import { thinkingPose } from './thinkingPose';
 import { cuteNod } from './cuteNod';
 import { stretchRelax } from './stretchRelax';
-import { pokedanceBounce } from './pokedanceBounce';
-import { playfulNeko } from './playfulNeko';
-import { idolCheer } from './idolCheer';
 
 export {
   curiousTilt,
@@ -19,9 +16,6 @@ export {
   thinkingPose,
   cuteNod,
   stretchRelax,
-  pokedanceBounce,
-  playfulNeko,
-  idolCheer,
 };
 
 export type { IdleGesture, IdleGestureContext, IdleGestureResult, IdleGestureDefinition };
@@ -34,9 +28,6 @@ export const IDLE_GESTURES: IdleGestureDefinition[] = [
   thinkingPose,
   cuteNod,
   stretchRelax,
-  pokedanceBounce,
-  playfulNeko,
-  idolCheer,
 ];
 
 export const IDLE_GESTURE_MAP = new Map<IdleGesture, IdleGestureDefinition>(
