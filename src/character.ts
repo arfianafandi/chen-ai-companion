@@ -368,7 +368,7 @@ export class ChenCharacter {
       this.activeCustomMotion = null;
       this.previewPose = null;
       this.gestureTimer = 0;
-      this.gestureDuration = 2.67;
+      this.gestureDuration = 3.0;
       this.gestureWeight = 1.0;
 
       this.playStructuredMotion('gentleWave', {

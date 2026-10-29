@@ -36,10 +36,10 @@ export const STRUCTURED_MOTIONS: StructuredMotionEntry[] = [
   },
   {
     id: 'gentleWave',
-    name: 'Lambaian Tangan Otentik MMD (Full 20 Bones & 15 Jari)',
-    description: 'Lambaian tangan otentik MMD dengan artikulasi 15 jari, bahu, siku, pergelangan tangan ritmis, dan senyuman hangat.',
-    durationSeconds: 2.67,
-    totalFrames: 80,
+    name: 'Lambaian Tangan Ramah (Full 21 Bones & 15 Jari)',
+    description: 'Lambaian tangan ramah di area terbuka (jauh dari kepala) dengan artikulasi 15 jari, bahu, siku, dan senyuman.',
+    durationSeconds: 3.0,
+    totalFrames: 90,
     load: async () => (await import('./gentleWave')).default,
   },
 ];
