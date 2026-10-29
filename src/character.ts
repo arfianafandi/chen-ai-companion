@@ -368,7 +368,7 @@ export class ChenCharacter {
       this.activeCustomMotion = null;
       this.previewPose = null;
       this.gestureTimer = 0;
-      this.gestureDuration = 3.2;
+      this.gestureDuration = 3.6;
       this.gestureWeight = 1.0;
 
       this.playStructuredMotion('gentleWave', {
@@ -512,8 +512,6 @@ export class ChenCharacter {
         onComplete: () => {
           if (options?.audioUrl) {
             this.stopStructuredMotion();
-          } else {
-            structuredMotionPlayer.stop(0.25);
           }
           options?.onComplete?.();
         },
