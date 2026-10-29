@@ -327,13 +327,15 @@ export class ChenVoicePlayer {
 
 export const chenVoice = new ChenVoicePlayer();
 
-// DYNAMIC TTS MANAGER (For Freeform AI Chat with auto-voice discovery)
+// DYNAMIC TTS MANAGER (For Freeform AI Chat with auto-voice discovery & Pipelined Streaming)
 export class TTSManager {
   private synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
   public isSpeaking = false;
   public onLipSyncUpdate: ((vowel: string, intensity: number) => void) | null = null;
   private lipSyncInterval: number | null = null;
   private cachedVoices: SpeechSynthesisVoice[] = [];
+  private speechQueue: { text: string; options: { lang?: string; pitch?: number; rate?: number } }[] = [];
+  private isProcessingQueue = false;
 
   constructor() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -356,17 +358,42 @@ export class TTSManager {
     return this.cachedVoices;
   }
 
+  enqueueSpeech(text: string, options: { lang?: string; pitch?: number; rate?: number } = {}) {
+    const cleanText = text.replace(/\[.*?\]/g, '').replace(/[#*`_~]/g, '').trim();
+    if (!cleanText) return;
+    this.speechQueue.push({ text: cleanText, options });
+    if (!this.isProcessingQueue) {
+      this.processQueue();
+    }
+  }
+
+  private async processQueue() {
+    if (this.isProcessingQueue || this.speechQueue.length === 0) return;
+    this.isProcessingQueue = true;
+
+    while (this.speechQueue.length > 0) {
+      const item = this.speechQueue.shift();
+      if (!item) break;
+      await this.speakUtterance(item.text, item.options);
+    }
+
+    this.isProcessingQueue = false;
+  }
+
   speak(text: string, options: { lang?: string; pitch?: number; rate?: number } = {}): Promise<void> {
+    this.stop();
+    chenVoice.stop();
+    return this.speakUtterance(text, options);
+  }
+
+  private speakUtterance(text: string, options: { lang?: string; pitch?: number; rate?: number } = {}): Promise<void> {
     return new Promise((resolve) => {
       if (!this.synth) {
         resolve();
         return;
       }
 
-      this.stop();
-      chenVoice.stop();
-
-      const cleanText = text.replace(/\[.*?\]/g, '').trim();
+      const cleanText = text.replace(/\[.*?\]/g, '').replace(/[#*`_~]/g, '').trim();
       if (!cleanText) {
         resolve();
         return;
@@ -391,9 +418,18 @@ export class TTSManager {
 
       const phonemes = extractPhoneticVowels(cleanText);
 
+      let finished = false;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        this.finishSpeech();
+        resolve();
+      };
+
       utterance.onstart = () => {
         this.isSpeaking = true;
         let step = 0;
+        if (this.lipSyncInterval !== null) clearInterval(this.lipSyncInterval);
         this.lipSyncInterval = window.setInterval(() => {
           if (!this.isSpeaking) return;
           const p = phonemes[step % phonemes.length];
@@ -405,17 +441,14 @@ export class TTSManager {
         }, 80);
       };
 
-      utterance.onend = () => {
-        this.finishSpeech();
-        resolve();
-      };
+      utterance.onend = done;
+      utterance.onerror = done;
 
-      utterance.onerror = () => {
-        this.finishSpeech();
-        resolve();
-      };
-
-      this.synth.speak(utterance);
+      try {
+        this.synth.speak(utterance);
+      } catch {
+        done();
+      }
     });
   }
 
@@ -431,6 +464,8 @@ export class TTSManager {
   }
 
   stop() {
+    this.speechQueue = [];
+    this.isProcessingQueue = false;
     if (this.synth) {
       this.synth.cancel();
     }

@@ -414,6 +414,27 @@ body {
   font-size: 14px;
   line-height: 1.5;
   color: #fff;
+  word-break: break-word;
+}
+
+.typing-cursor {
+  display: inline-block;
+  color: var(--ef-yellow);
+  font-weight: 900;
+  animation: cursorBlink 0.65s infinite ease-in-out;
+  margin-left: 2px;
+  text-shadow: 0 0 6px rgba(255, 230, 0, 0.7);
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; transform: scale(1.05); }
+  50% { opacity: 0; transform: scale(0.95); }
+}
+
+.streaming-thinking {
+  color: var(--ef-text-dim);
+  font-style: italic;
+  font-size: 13px;
 }
 
 /* BOTTOM CHAT DECK */

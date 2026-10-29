@@ -677,47 +677,71 @@ export class UIManager {
 
       this.addChatMessage('user', text);
 
-      // Show typing indicator
-      this.showSpeechBubble('Thinking...', 'normal');
+      // Show initial speech bubble state with streaming cursor
+      this.showSpeechBubble('...', 'normal', 0, true);
 
-      // Generate AI response
-      const reply = await ai.generateResponse(text);
-      
-      // Update Chen
-      this.chen.setEmotion(reply.emotion);
-      if (reply.trainedMotion) {
-        if (reply.trainedMotion.id === 'motion_poke_sway') {
-          this.chen.playStructuredMotion('pokedance', { loop: false, allowLookAt: true, blendDuration: 0.4 });
-        } else if (reply.trainedMotion.id === 'motion_neko_paws') {
-          this.chen.playStructuredMotion('yurusiteNeko', { loop: false, allowLookAt: true, blendDuration: 0.4 });
-        } else if (reply.trainedMotion.id === 'motion_idol_cheer') {
-          this.chen.playStructuredMotion('michinoTimothy', { loop: false, allowLookAt: true, blendDuration: 0.4 });
-        } else {
-          this.chen.playTrainedMotion(reply.trainedMotion);
-        }
-      } else if (reply.gestureId) {
-        this.chen.triggerGesture(reply.gestureId as any);
+      // Stop any prior speech / voices before starting new stream
+      tts.stop();
+      chenVoice.stop();
+
+      const targetLang = chenVoice.language === 'zh' ? 'zh-CN' : (chenVoice.language === 'ja' ? 'ja-JP' : ai.settings.voiceLang);
+
+      try {
+        await ai.generateResponseStream(text, {
+          onEmotion: (emotion) => {
+            this.chen.setEmotion(emotion);
+            const tagEl = this.container.querySelector('#bubble-emotion-tag');
+            if (tagEl) tagEl.textContent = emotion.toUpperCase();
+          },
+          onToken: (_token, accumulatedClean) => {
+            this.showSpeechBubble(accumulatedClean, 'smile', 0, true);
+          },
+          onSentence: (sentence) => {
+            if (ai.settings.voiceEnabled) {
+              tts.enqueueSpeech(sentence, {
+                lang: targetLang,
+                pitch: ai.settings.voicePitch,
+                rate: ai.settings.voiceRate,
+              });
+            }
+          },
+          onDone: (reply) => {
+            this.chen.setEmotion(reply.emotion);
+            this.showSpeechBubble(reply.text, reply.emotion, 8, false);
+            this.addChatMessage('chen', reply.text, reply.emotion, reply.thought, reply.memoryId);
+
+            // If authentic studio voice matched, prioritize it
+            if (ai.settings.voiceEnabled && reply.voiceKey) {
+              tts.stop();
+              chenVoice.playVoice(reply.voiceKey, reply.spokenText);
+            }
+
+            // Motion & gesture triggers
+            if (reply.trainedMotion) {
+              if (reply.trainedMotion.id === 'motion_poke_sway') {
+                this.chen.playStructuredMotion('pokedance', { loop: false, allowLookAt: true, blendDuration: 0.4 });
+              } else if (reply.trainedMotion.id === 'motion_neko_paws') {
+                this.chen.playStructuredMotion('yurusiteNeko', { loop: false, allowLookAt: true, blendDuration: 0.4 });
+              } else if (reply.trainedMotion.id === 'motion_idol_cheer') {
+                this.chen.playStructuredMotion('michinoTimothy', { loop: false, allowLookAt: true, blendDuration: 0.4 });
+              } else {
+                this.chen.playTrainedMotion(reply.trainedMotion);
+              }
+            } else if (reply.gestureId) {
+              this.chen.triggerGesture(reply.gestureId as any);
+            }
+
+            // Add chat bond XP
+            affection.addXp(6);
+          },
+          onError: (err) => {
+            console.warn('Stream notice:', err);
+          }
+        });
+      } catch (e) {
+        console.error('Chat error:', e);
+        this.showSpeechBubble('Maaf, Administrator... Transmisi komunikasi mengalami kendala teknis. [EMOTE:serious]', 'serious', 8, false);
       }
-      this.showSpeechBubble(reply.text, reply.emotion);
-      this.addChatMessage('chen', reply.text, reply.emotion, reply.thought, reply.memoryId);
-
-      // Play voice (Prioritize Authentic Studio Chen Voice!)
-      if (ai.settings.voiceEnabled) {
-        if (reply.voiceKey) {
-          chenVoice.playVoice(reply.voiceKey);
-        } else {
-          const spoken = reply.spokenText || reply.text;
-          const targetLang = chenVoice.language === 'zh' ? 'zh-CN' : (chenVoice.language === 'ja' ? 'ja-JP' : ai.settings.voiceLang);
-          tts.speak(spoken, {
-            lang: targetLang,
-            pitch: ai.settings.voicePitch,
-            rate: ai.settings.voiceRate,
-          });
-        }
-      }
-
-      // Add chat bond XP
-      affection.addXp(6);
     };
 
     sendBtn.addEventListener('click', handleSend);
@@ -1022,10 +1046,24 @@ export class UIManager {
       apiUrlGroup.style.display = isOnline && val !== 'gemini' ? 'block' : 'none';
       apiModelGroup.style.display = isOnline ? 'block' : 'none';
 
-      if (val === 'gemini') apiModelInput.placeholder = 'gemini-1.5-flash';
-      else if (val === 'groq') apiModelInput.placeholder = 'llama-3.3-70b-versatile';
-      else if (val === 'openai') apiModelInput.placeholder = 'gpt-4o-mini';
-      else if (val === 'ollama') apiModelInput.placeholder = 'llama3';
+      if (val === 'gemini') {
+        apiModelInput.placeholder = 'gemini-1.5-flash';
+      } else if (val === 'groq') {
+        apiModelInput.placeholder = 'llama-3.3-70b-versatile';
+        if (!apiUrlInput.value || apiUrlInput.value.includes('openai.com') || apiUrlInput.value.includes('11434')) {
+          apiUrlInput.value = 'https://api.groq.com/openai/v1';
+        }
+      } else if (val === 'openai') {
+        apiModelInput.placeholder = 'gpt-4o-mini';
+        if (!apiUrlInput.value || apiUrlInput.value.includes('groq.com') || apiUrlInput.value.includes('11434')) {
+          apiUrlInput.value = 'https://api.openai.com/v1';
+        }
+      } else if (val === 'ollama') {
+        apiModelInput.placeholder = 'llama3';
+        if (!apiUrlInput.value || apiUrlInput.value.includes('groq.com') || apiUrlInput.value.includes('openai.com')) {
+          apiUrlInput.value = 'http://localhost:11434/v1';
+        }
+      }
     };
 
     providerSelect.addEventListener('change', updateProviderFields);
@@ -1071,10 +1109,18 @@ export class UIManager {
 
     saveSettingsBtn.addEventListener('click', () => {
       sfx.playClick();
-      ai.settings.provider = providerSelect.value as any;
+      const val = providerSelect.value as any;
+      ai.settings.provider = val;
       ai.settings.apiKey = apiKeyInput.value.trim();
-      ai.settings.apiUrl = apiUrlInput.value.trim() || 'https://api.groq.com/openai/v1';
-      ai.settings.model = apiModelInput.value.trim() || 'llama-3.3-70b-versatile';
+
+      let defaultUrl = 'https://api.groq.com/openai/v1';
+      let defaultModel = 'llama-3.3-70b-versatile';
+      if (val === 'gemini') defaultModel = 'gemini-1.5-flash';
+      else if (val === 'openai') { defaultUrl = 'https://api.openai.com/v1'; defaultModel = 'gpt-4o-mini'; }
+      else if (val === 'ollama') { defaultUrl = 'http://localhost:11434/v1'; defaultModel = 'llama3'; }
+
+      ai.settings.apiUrl = apiUrlInput.value.trim() || defaultUrl;
+      ai.settings.model = apiModelInput.value.trim() || defaultModel;
       
       const voiceActive = (this.container.querySelector('#voice-enable-check') as HTMLInputElement).checked;
       ai.settings.voiceEnabled = voiceActive;
@@ -1635,18 +1681,23 @@ export class UIManager {
     this.chen.playDance(track.motionUrl, track.audioUrl, track.id);
   }
 
-  showSpeechBubble(text: string, emotion: EmotionType = 'normal', durationSeconds: number = 8) {
+  showSpeechBubble(text: string, emotion: EmotionType = 'normal', durationSeconds: number = 8, isStreaming: boolean = false) {
     const bubble = this.container.querySelector('#speech-bubble') as HTMLElement;
     const textEl = this.container.querySelector('#bubble-text') as HTMLElement;
     const tagEl = this.container.querySelector('#bubble-emotion-tag') as HTMLElement;
 
     const clean = text.replace(/\[.*?\]/g, '').trim();
-    tagEl.textContent = emotion.toUpperCase();
-    textEl.textContent = clean;
+    tagEl.textContent = isStreaming ? 'TRANSMITTING' : emotion.toUpperCase();
+    if (isStreaming) {
+      textEl.innerHTML = `${clean || '...'} <span class="typing-cursor">▌</span>`;
+    } else {
+      textEl.textContent = clean;
+    }
     bubble.style.display = 'block';
 
     if (this.speechTimer !== null) {
       clearTimeout(this.speechTimer);
+      this.speechTimer = null;
     }
     if (durationSeconds > 0) {
       this.speechTimer = window.setTimeout(() => {

@@ -15,6 +15,44 @@ export interface AIResponse {
   memoryId?: string;
 }
 
+export interface StreamCallbacks {
+  onStart?: () => void;
+  onToken?: (token: string, accumulatedCleanText: string) => void;
+  onSentence?: (sentence: string) => void;
+  onEmotion?: (emotion: EmotionType) => void;
+  onDone?: (finalResponse: AIResponse) => void;
+  onError?: (error: any) => void;
+}
+
+async function* parseSSEStream(response: Response): AsyncGenerator<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith(':')) continue;
+      if (trimmed.startsWith('data: ')) {
+        const payload = trimmed.slice(6).trim();
+        if (payload) yield payload;
+      }
+    }
+  }
+
+  if (buffer.trim().startsWith('data: ')) {
+    const payload = buffer.trim().slice(6).trim();
+    if (payload) yield payload;
+  }
+}
+
 export const DEFAULT_AI_SETTINGS: AISettings = {
   provider: 'offline',
   apiKey: '',
@@ -60,6 +98,15 @@ export class AIEngine {
   }
 
   async generateResponse(userInput: string): Promise<AIResponse> {
+    return this.generateResponseStream(userInput);
+  }
+
+  async generateResponseStream(
+    userInput: string,
+    callbacks?: StreamCallbacks
+  ): Promise<AIResponse> {
+    callbacks?.onStart?.();
+
     this.messageHistory.push({
       id: Math.random().toString(36).substring(2, 9),
       sender: 'user',
@@ -73,13 +120,69 @@ export class AIEngine {
       affectionLevel: affection.getCurrentLevel().level,
     });
 
-    // 2. Check if user is teaching Chen in natural language ("ingat ini: ...", "kalau aku bilang X jawab Y")
+    // Tracking state for live emotion, sentence chunking & clean display
+    let currentEmotion: EmotionType = 'smile';
+    let accumulatedRaw = '';
+    let sentenceBuffer = '';
+
+    const processChunk = (chunk: string) => {
+      accumulatedRaw += chunk;
+      sentenceBuffer += chunk;
+
+      // Realtime emotion detection
+      const emoteMatch = accumulatedRaw.match(/\[EMOTE:([a-zA-Z]+)\]/i);
+      if (emoteMatch) {
+        const detected = emoteMatch[1].toLowerCase() as EmotionType;
+        const valid: EmotionType[] = [
+          'normal', 'smile', 'happy', 'blush', 'wink', 
+          'surprised', 'serious', 'jitome', 'pout', 'smug', 'tehepero'
+        ];
+        if (valid.includes(detected) && detected !== currentEmotion) {
+          currentEmotion = detected;
+          callbacks?.onEmotion?.(currentEmotion);
+        }
+      }
+
+      // Clean display text (strip emote tags & partial unclosed tags)
+      const cleanDisplay = accumulatedRaw
+        .replace(/\[EMOTE:[^\]]*\]?/gi, '')
+        .trimStart();
+
+      callbacks?.onToken?.(chunk, cleanDisplay);
+
+      // Sentence pipelining for continuous zero-wait TTS
+      const sentenceEndMatch = sentenceBuffer.match(/([^.!?\n。！？]+[.!?\n。！？]+)/);
+      if (sentenceEndMatch) {
+        const completeSentence = sentenceEndMatch[1];
+        sentenceBuffer = sentenceBuffer.substring(completeSentence.length);
+        const cleanSentence = completeSentence.replace(/\[.*?\]/g, '').trim();
+        if (cleanSentence) {
+          callbacks?.onSentence?.(cleanSentence);
+        }
+      }
+    };
+
+    const flushRemainingSentence = () => {
+      const cleanSentence = sentenceBuffer.replace(/\[.*?\]/g, '').trim();
+      if (cleanSentence) {
+        callbacks?.onSentence?.(cleanSentence);
+        sentenceBuffer = '';
+      }
+    };
+
+    // 2. Check if user is teaching Chen in natural language
     const teachResult = neuralMemory.tryParseInChatTeaching(userInput);
     if (teachResult.taught && teachResult.feedback) {
+      const replyText = teachResult.feedback;
+      const emotion = teachResult.emotion || 'happy';
+      callbacks?.onEmotion?.(emotion);
+      await this.simulateTypingStream(replyText, processChunk);
+      flushRemainingSentence();
+
       const reply: AIResponse = {
-        text: teachResult.feedback,
-        emotion: teachResult.emotion || 'happy',
-        spokenText: teachResult.feedback,
+        text: replyText,
+        emotion,
+        spokenText: replyText,
         thought: `[Sistem Pembelajaran]: Berhasil menyerap aturan kognitif baru dari instruksi Administrator.`,
       };
       this.messageHistory.push({
@@ -89,6 +192,7 @@ export class AIEngine {
         timestamp: Date.now(),
         emotion: reply.emotion,
       });
+      callbacks?.onDone?.(reply);
       return reply;
     }
 
@@ -100,6 +204,10 @@ export class AIEngine {
       if (mem.motionId) {
         trainedMotion = motionTrainer.trainedMotions.find(m => m.id === mem.motionId);
       }
+      callbacks?.onEmotion?.(mem.emotion);
+      await this.simulateTypingStream(mem.response, processChunk);
+      flushRemainingSentence();
+
       const reply: AIResponse = {
         text: mem.response,
         emotion: mem.emotion,
@@ -116,44 +224,81 @@ export class AIEngine {
         timestamp: Date.now(),
         emotion: reply.emotion,
       });
+      callbacks?.onDone?.(reply);
       return reply;
     }
 
-    // 4. Check if user input triggers a trained motion directly (e.g. "hormat", "kucing", "lambaian")
+    // 4. Check if user input triggers a trained motion directly
     const matchedMotion = motionTrainer.findMatchingMotion(userInput);
 
-    let result: { text: string; voiceKey?: string; spokenText?: string };
+    let fullReply = '';
+    let voiceKey: string | undefined;
+    let spokenText: string | undefined;
 
     if (this.settings.provider === 'offline' || !this.settings.apiKey) {
-      result = this.getOfflineResponse(userInput);
+      const off = this.getOfflineResponse(userInput);
+      voiceKey = off.voiceKey;
+      spokenText = off.spokenText;
+      const offEmotion = this.extractEmotion(off.text);
+      callbacks?.onEmotion?.(offEmotion);
+      await this.simulateTypingStream(off.text, processChunk);
+      flushRemainingSentence();
+      fullReply = off.text;
     } else {
       try {
-        const raw = await this.fetchOnlineLLMResponse(userInput);
-        result = { text: raw, spokenText: raw };
+        const isZh = chenVoice.language === 'zh' || this.settings.voiceLang.startsWith('zh');
+        const isJa = chenVoice.language === 'ja' || this.settings.voiceLang.startsWith('ja');
+        let languageInstruction = 'Answer in Chinese (Mandarin) with a brief Indonesian translation in parentheses.';
+        if (isJa) {
+          languageInstruction = 'Answer in Japanese with a brief Indonesian translation in parentheses.';
+        }
+        const enhancedSystemPrompt = `${this.settings.systemPrompt}\nIMPORTANT: ${languageInstruction}`;
+
+        if (this.settings.provider === 'gemini') {
+          fullReply = await this.fetchGeminiStream(userInput, enhancedSystemPrompt, processChunk);
+        } else {
+          fullReply = await this.fetchOpenAICompatibleStream(userInput, enhancedSystemPrompt, processChunk);
+        }
+
+        if (!fullReply.trim()) {
+          throw new Error('Empty response from LLM stream');
+        }
+        flushRemainingSentence();
       } catch (err) {
-        console.warn('Online LLM failed, falling back to smart offline engine:', err);
-        result = this.getOfflineResponse(userInput);
+        console.warn('Streaming LLM failed, falling back to smart offline response:', err);
+        callbacks?.onError?.(err);
+        const off = this.getOfflineResponse(userInput);
+        voiceKey = off.voiceKey;
+        spokenText = off.spokenText;
+        const offEmotion = this.extractEmotion(off.text);
+        callbacks?.onEmotion?.(offEmotion);
+        await this.simulateTypingStream(off.text, processChunk);
+        flushRemainingSentence();
+        fullReply = off.text;
       }
     }
 
-    const emotion = this.extractEmotion(result.text);
+    const finalEmotion = this.extractEmotion(fullReply);
+
+    const reply: AIResponse = {
+      text: fullReply,
+      emotion: finalEmotion,
+      voiceKey,
+      spokenText: spokenText || fullReply,
+      thought,
+      trainedMotion: matchedMotion || undefined,
+    };
 
     this.messageHistory.push({
       id: Math.random().toString(36).substring(2, 9),
       sender: 'chen',
-      text: result.text,
+      text: reply.text,
       timestamp: Date.now(),
-      emotion,
+      emotion: reply.emotion,
     });
 
-    return {
-      text: result.text,
-      emotion,
-      voiceKey: result.voiceKey,
-      spokenText: result.spokenText,
-      thought,
-      trainedMotion: matchedMotion || undefined,
-    };
+    callbacks?.onDone?.(reply);
+    return reply;
   }
 
   private extractEmotion(text: string): EmotionType {
@@ -313,43 +458,67 @@ export class AIEngine {
     };
   }
 
-  private async fetchOnlineLLMResponse(userInput: string): Promise<string> {
-    const isZh = chenVoice.language === 'zh' || this.settings.voiceLang.startsWith('zh');
-    const isJa = chenVoice.language === 'ja' || this.settings.voiceLang.startsWith('ja');
-    
-    let languageInstruction = 'Answer in Chinese (Mandarin) with a brief Indonesian translation in parentheses.';
-    if (isJa) {
-      languageInstruction = 'Answer in Japanese with a brief Indonesian translation in parentheses.';
+  private async simulateTypingStream(fullText: string, onChunk: (part: string) => void): Promise<string> {
+    const parts = fullText.split(/(\s+|[,.!?。！？\n]+)/);
+    for (const part of parts) {
+      if (!part) continue;
+      onChunk(part);
+      const delay = part.length > 4 ? 28 : 14;
+      await new Promise(r => setTimeout(r, delay));
+    }
+    return fullText;
+  }
+
+  private async fetchGeminiStream(
+    userInput: string,
+    enhancedSystemPrompt: string,
+    onToken: (chunk: string) => void
+  ): Promise<string> {
+    const model = this.settings.model || 'gemini-1.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${this.settings.apiKey}`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: enhancedSystemPrompt }],
+        },
+        contents: [
+          ...this.messageHistory.slice(-8).map(m => ({
+            role: m.sender === 'user' ? 'user' : 'model',
+            parts: [{ text: m.text }],
+          })),
+          { role: 'user', parts: [{ text: userInput }] },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Gemini Stream Error (${res.status}): ${errText || res.statusText}`);
     }
 
-    const enhancedSystemPrompt = `${this.settings.systemPrompt}\nIMPORTANT: ${languageInstruction}`;
-
-    const isGemini = this.settings.provider === 'gemini';
-    
-    if (isGemini) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.settings.model || 'gemini-1.5-flash'}:generateContent?key=${this.settings.apiKey}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: enhancedSystemPrompt }],
-          },
-          contents: [
-            ...this.messageHistory.slice(-8).map(m => ({
-              role: m.sender === 'user' ? 'user' : 'model',
-              parts: [{ text: m.text }],
-            })),
-            { role: 'user', parts: [{ text: userInput }] },
-          ],
-        }),
-      });
-
-      if (!res.ok) throw new Error(`Gemini API Error: ${res.statusText}`);
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || (isZh ? '收到，管理员！' : '了解しました、管理官！');
+    let accumulated = '';
+    for await (const chunkData of parseSSEStream(res)) {
+      try {
+        const json = JSON.parse(chunkData);
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          accumulated += text;
+          onToken(text);
+        }
+      } catch {}
     }
 
+    return accumulated;
+  }
+
+  private async fetchOpenAICompatibleStream(
+    userInput: string,
+    enhancedSystemPrompt: string,
+    onToken: (chunk: string) => void
+  ): Promise<string> {
     let endpoint = this.settings.apiUrl;
     if (!endpoint.endsWith('/chat/completions')) {
       endpoint = `${endpoint.replace(/\/+$/, '')}/chat/completions`;
@@ -364,23 +533,44 @@ export class AIEngine {
       { role: 'user', content: userInput },
     ];
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (this.settings.apiKey) {
+      headers['Authorization'] = `Bearer ${this.settings.apiKey}`;
+    }
+
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
-        model: this.settings.model,
+        model: this.settings.model || 'llama-3.3-70b-versatile',
         messages,
         temperature: 0.7,
-        max_tokens: 300,
+        max_tokens: 350,
+        stream: true,
       }),
     });
 
-    if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content || (isZh ? '收到，管理员！' : '了解しました、管理官！');
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`LLM Stream Error (${res.status}): ${errText || res.statusText}`);
+    }
+
+    let accumulated = '';
+    for await (const chunkData of parseSSEStream(res)) {
+      if (chunkData === '[DONE]') break;
+      try {
+        const json = JSON.parse(chunkData);
+        const delta = json.choices?.[0]?.delta?.content;
+        if (delta) {
+          accumulated += delta;
+          onToken(delta);
+        }
+      } catch {}
+    }
+
+    return accumulated;
   }
 }
 

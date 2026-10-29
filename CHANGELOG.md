@@ -4,6 +4,27 @@ Dokumen ini mencatat setiap permintaan, analisis teknis, modifikasi kode, hasil 
 
 ---
 
+## 📅 [2026-10-30 00:26 WIB] — Implementasi Opsi A: Streaming LLM & Pipelined Neural Voice Lip-Sync
+- **Pilihan User**: *"A"* (Integrasi Streaming LLM & Suara Neural Dinamis — Fase 1 Roadmap).
+- **Implementasi**:
+  - **Streaming LLM Token-by-Token (`src/ai.ts`)**:
+    - Menambahkan `generateResponseStream` dengan SSE parser streaming (`ReadableStream` & `parseSSEStream`).
+    - Dukungan Google Gemini (`:streamGenerateContent?alt=sse`) dan provider OpenAI-compatible (Groq / OpenAI / Ollama) dengan SSE `stream: true`.
+    - Simulasi pengetikan mulus (`simulateTypingStream`) untuk mode offline/memory match sehingga respons terasa natural dan interaktif tanpa jeda.
+    - Ekstraksi tag emosi (`[EMOTE:...]`) dinamis saat token dialirkan, otomatis membersihkan tampilan balon teks tanpa flicker tag mentah.
+  - **Live Streaming Speech Bubble & Typing Cursor (`src/ui.ts` & `src/style.css`)**:
+    - Balon dialog langsung menyala seketika kata pertama keluar (latensi respon awal <0.3 detik).
+    - Efek kursor pengetikan `▌` bercahaya kuning Endfield (`.typing-cursor`) dengan animasi berkedip lembut.
+    - Tag status dinamis `TRANSMITTING` saat teks mengalir, berganti otomatis ke emosi karakter setelah selesai.
+  - **Pipelined Zero-Wait Speech Synthesis & MMD Lip-Sync (`src/audio.ts`)**:
+    - Menambahkan `speechQueue` pada `TTSManager` untuk membaca kalimat per kalimat segera setelah tanda baca (`.`, `!`, `?`, `\n`, `。`, `！？`) terdeteksi.
+    - Suara dan gerak mulut MMD viseme (`あ`, `い`, `う`, `え`, `お`) mulai berbicara di kalimat pertama saat kalimat berikutnya masih mengalir dari LLM (zero-wait streaming latency).
+    - Suara studio otentik Chen tetap diprioritaskan saat frasa kunci terpicu.
+- **Verifikasi**: `tsc && vite build` sukses 0 error (127 modul tertransformasi).
+- **Status Deployment**: Commit dan push ke branch `main`, rilis otomatis ke GitHub Pages.
+
+---
+
 ## 📅 [2026-10-30 00:08 WIB] — Perancangan Roadmap Masa Depan Chen AI Companion
 - **Pertanyaan User**: *"apakah kamu punya planning pengembangan kedepannya gimana? boleh tulis di sini?"*
 - **Implementasi**:
