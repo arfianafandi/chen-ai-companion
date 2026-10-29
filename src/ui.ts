@@ -860,10 +860,6 @@ export class UIManager {
       this.showSpeechBubble('Dance complete! Did you enjoy it, Administrator? [EMOTE:smile]', 'smile');
     });
 
-    this.chen.onDanceEnd = () => {
-      stopDanceBtn.style.display = 'none';
-    };
-
     // 9. Expression Buttons
     const exprBtns = this.container.querySelectorAll('.expr-btn');
     exprBtns.forEach(b => {
@@ -1632,7 +1628,10 @@ export class UIManager {
     stopBtn.style.display = 'block';
 
     // Pure VMD playback for full dances as requested
-    this.chen.playDance(track.motionUrl, track.audioUrl, track.id);
+    this.chen.playDance(track.motionUrl, track.audioUrl, track.id, () => {
+      stopBtn.style.display = 'none';
+      this.showSpeechBubble('Dance complete! Did you enjoy it, Administrator? [EMOTE:smile]', 'smile');
+    });
   }
 
   showSpeechBubble(text: string, emotion: EmotionType = 'normal', durationSeconds: number = 8) {

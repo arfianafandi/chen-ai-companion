@@ -21,14 +21,19 @@ import { STRUCTURED_MOTIONS, type StructuredMotionEntry } from './motions/data';
 export type { IdleGesture, StructuredMotionEntry, PlaybackOptions };
 export { STRUCTURED_MOTIONS, structuredMotionPlayer };
 
-interface BoneSnapshot {
-  position: THREE.Vector3;
-  quaternion: THREE.Quaternion;
+interface RestBoneTransform {
+  bone: THREE.Bone;
+  name: string;
+  restPosition: THREE.Vector3;
+  restQuaternion: THREE.Quaternion;
 }
 
-function smootherstep(x: number): number {
-  const c = Math.max(0, Math.min(1, x));
-  return c * c * c * (c * (c * 6 - 15) + 10);
+interface PostDanceBoneSnapshot {
+  bone: THREE.Bone;
+  startPosition: THREE.Vector3;
+  startQuaternion: THREE.Quaternion;
+  restPosition: THREE.Vector3;
+  restQuaternion: THREE.Quaternion;
 }
 
 export class ChenCharacter {
@@ -41,19 +46,15 @@ export class ChenCharacter {
   public isDancing = false;
   public currentDanceId: string | null = null;
   public danceTime = 0;
-  public danceTransitionState: 'none' | 'blend_in' | 'dancing' | 'blend_out' = 'none';
-  private danceTransitionTimer = 0;
-  private readonly DANCE_BLEND_IN_DURATION = 0.6;
-  private readonly DANCE_BLEND_OUT_DURATION = 0.8;
-  private preDanceSnapshot = new Map<THREE.Bone, BoneSnapshot>();
-  private exitDanceSnapshot = new Map<THREE.Bone, BoneSnapshot>();
-  private boneRestTransforms = new Map<THREE.Bone, BoneSnapshot>();
   private cachedAnimations = new Map<string, ThreeMmdAnimation>();
   private savedExternalPhysicsData: any = null;
-  private scratchTargetPos = new THREE.Vector3();
-  private scratchTargetQuat = new THREE.Quaternion();
-  private exitMorphSnapshot: Float32Array | null = null;
-  public onDanceEnd?: () => void;
+
+  // Post-Dance Return-to-Idle Transition System (Snappy 0.55s smooth slerp/lerp)
+  private skeletonRestPoses: RestBoneTransform[] = [];
+  public isReturningFromDance = false;
+  private postDanceTimer = 0;
+  private postDanceDuration = 0.55;
+  private postDanceSnapshots: PostDanceBoneSnapshot[] = [];
 
   // Performance & Quality State
   public outlineEnabled = false; // Default false for smooth 60 FPS (toggleable)
@@ -193,15 +194,6 @@ export class ChenCharacter {
     this.mesh = mmdModel.mesh;
     if (this.mesh) {
       structuredMotionPlayer.attachMesh(this.mesh);
-      if (this.mesh.skeleton) {
-        this.boneRestTransforms.clear();
-        for (const bone of this.mesh.skeleton.bones) {
-          this.boneRestTransforms.set(bone, {
-            position: bone.position.clone(),
-            quaternion: bone.quaternion.clone(),
-          });
-        }
-      }
     }
 
     // 3. Bind mesh & runtime external physics data so Bullet WASM simulates all 310 rigid bodies!
@@ -248,8 +240,15 @@ export class ChenCharacter {
       }
     });
 
-    // Locate critical bones for procedural life
+    // Locate critical bones for procedural life & record rest poses for snappy return-to-idle
     if (this.mesh && this.mesh.skeleton) {
+      this.skeletonRestPoses = this.mesh.skeleton.bones.map((bone) => ({
+        bone,
+        name: bone.name,
+        restPosition: bone.position.clone(),
+        restQuaternion: bone.quaternion.clone(),
+      }));
+
       for (const bone of this.mesh.skeleton.bones) {
         const name = bone.name;
         if (name === '頭' || name.toLowerCase() === 'head') this.headBone = bone;
@@ -399,7 +398,7 @@ export class ChenCharacter {
       this.previewPose = null;
       this.gestureTimer = 0;
       this.gestureDuration = 3.2;
-      this.gestureWeight = 0;
+      this.gestureWeight = 1.0;
 
       this.playStructuredMotion('gentleWave', {
         loop: false,
@@ -408,6 +407,7 @@ export class ChenCharacter {
         onComplete: () => {
           this.currentGesture = 'none';
           this.gestureWeight = 0;
+          this.startPostDanceTransition(0.4);
         }
       });
       return;
@@ -454,31 +454,94 @@ export class ChenCharacter {
     this.customMotionWeight = 0;
   }
 
-  async playDance(motionUrl: string, audioUrl: string, danceId: string): Promise<void> {
-    if (!this.model || !this.loader || !this.mesh) return;
-    if (structuredMotionPlayer.isPlaying) {
-      structuredMotionPlayer.stop(0.3);
+  private isProceduralBone(bone: THREE.Bone): boolean {
+    return (
+      bone === this.centerBone ||
+      bone === this.hipsBone ||
+      bone === this.spineBone ||
+      bone === this.spine2Bone ||
+      bone === this.leftArmBone ||
+      bone === this.leftElbowBone ||
+      bone === this.rightArmBone ||
+      bone === this.rightElbowBone ||
+      bone === this.rightWristBone ||
+      bone === this.headBone ||
+      bone === this.neckBone
+    );
+  }
+
+  /**
+   * Snappy & fluid return-to-idle transition (0.55s smooth slerp/lerp).
+   * Restores all non-procedural skeleton bones (legs, feet, IK, groove, twist)
+   * while procedural idle swiftly brings arms and posture home.
+   */
+  startPostDanceTransition(durationSeconds = 0.55) {
+    this.isReturningFromDance = true;
+    this.postDanceTimer = 0;
+    this.postDanceDuration = durationSeconds;
+    this.postDanceSnapshots = [];
+
+    if (!this.mesh || !this.mesh.skeleton) return;
+
+    for (const rest of this.skeletonRestPoses) {
+      if (this.isProceduralBone(rest.bone)) continue;
+
+      const posDistSq = rest.bone.position.distanceToSquared(rest.restPosition);
+      const rotAngle = rest.bone.quaternion.angleTo(rest.restQuaternion);
+
+      // Only track bones that were actually displaced or rotated by the dance
+      if (posDistSq > 1e-5 || rotAngle > 1e-4) {
+        this.postDanceSnapshots.push({
+          bone: rest.bone,
+          startPosition: rest.bone.position.clone(),
+          startQuaternion: rest.bone.quaternion.clone(),
+          restPosition: rest.restPosition,
+          restQuaternion: rest.restQuaternion,
+        });
+      }
+    }
+  }
+
+  private updatePostDanceTransition(delta: number) {
+    if (!this.isReturningFromDance) return;
+
+    this.postDanceTimer += delta;
+    const progress = Math.min(1.0, this.postDanceTimer / this.postDanceDuration);
+    // Smooth cubic ease-out curve (brisk start, velvety soft landing)
+    const t = 1.0 - Math.pow(1.0 - progress, 3);
+
+    for (let i = 0; i < this.postDanceSnapshots.length; i++) {
+      const snap = this.postDanceSnapshots[i];
+      snap.bone.position.lerpVectors(snap.startPosition, snap.restPosition, t);
+      snap.bone.quaternion.slerpQuaternions(snap.startQuaternion, snap.restQuaternion, t);
     }
 
-    try {
-      // Capture live pose snapshot of all bones before dance begins
-      if (this.mesh.skeleton) {
-        for (const bone of this.mesh.skeleton.bones) {
-          let snap = this.preDanceSnapshot.get(bone);
-          if (!snap) {
-            snap = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
-            this.preDanceSnapshot.set(bone, snap);
-          }
-          snap.position.copy(bone.position);
-          snap.quaternion.copy(bone.quaternion);
-        }
-      }
+    if (progress >= 1.0) {
+      this.isReturningFromDance = false;
+      this.postDanceSnapshots = [];
+    }
+  }
 
+  private resetDanceMorphs() {
+    if (!this.mesh || !this.mesh.morphTargetInfluences) return;
+    for (let i = 0; i < this.mesh.morphTargetInfluences.length; i++) {
+      this.mesh.morphTargetInfluences[i] = 0;
+    }
+    this.currentMorphWeights = {};
+  }
+
+  async playDance(motionUrl: string, audioUrl: string, danceId: string, onComplete?: () => void): Promise<void> {
+    if (!this.model || !this.loader) return;
+    if (structuredMotionPlayer.isPlaying) {
+      structuredMotionPlayer.stop(0.2);
+    }
+    this.isReturningFromDance = false;
+    this.postDanceSnapshots = [];
+
+    try {
       this.isDancing = true;
       this.currentDanceId = danceId;
-      this.danceTime = 0;
-      this.danceTransitionState = 'blend_in';
-      this.danceTransitionTimer = 0;
+      this.danceTime = 0; // Reset dance time to 0 so dance starts from frame 0!
 
       let anim = this.cachedAnimations.get(motionUrl);
       if (!anim) {
@@ -490,101 +553,21 @@ export class ChenCharacter {
 
       await danceAudio.play(audioUrl, () => {
         this.stopDance();
+        onComplete?.();
       });
     } catch (err) {
       console.error('Failed to play dance:', err);
-      this.finishStopDance();
+      this.stopDance();
+      onComplete?.();
     }
   }
 
-  private isProceduralBone(bone: THREE.Bone): boolean {
-    if (
-      bone === this.headBone ||
-      bone === this.neckBone ||
-      bone === this.spineBone ||
-      bone === this.spine2Bone ||
-      bone === this.leftShoulderBone ||
-      bone === this.rightShoulderBone ||
-      bone === this.centerBone ||
-      bone === this.hipsBone ||
-      bone === this.leftArmBone ||
-      bone === this.leftElbowBone ||
-      bone === this.rightArmBone ||
-      bone === this.rightElbowBone ||
-      bone === this.rightWristBone
-    ) {
-      return true;
-    }
-    return this.fingerBones.includes(bone);
-  }
-
-  public stopDance(immediate = false) {
-    if (!this.isDancing) return;
-
-    if (immediate || this.danceTransitionState === 'blend_out') {
-      this.finishStopDance();
-      return;
-    }
-
-    // Capture exit dance pose snapshot of every bone
-    if (this.mesh && this.mesh.skeleton) {
-      for (const bone of this.mesh.skeleton.bones) {
-        let snap = this.exitDanceSnapshot.get(bone);
-        if (!snap) {
-          snap = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
-          this.exitDanceSnapshot.set(bone, snap);
-        }
-        snap.position.copy(bone.position);
-        snap.quaternion.copy(bone.quaternion);
-      }
-    }
-
-    // Capture snapshot of morph influences so dance facial expressions fade smoothly to neutral
-    if (this.mesh && this.mesh.morphTargetInfluences) {
-      this.exitMorphSnapshot = new Float32Array(this.mesh.morphTargetInfluences);
-    }
-
-    this.danceTransitionState = 'blend_out';
-    this.danceTransitionTimer = 0;
-    this.currentDanceId = null;
-    danceAudio.stop();
-    this.setEmotion('normal');
-  }
-
-  private finishStopDance() {
+  stopDance() {
     this.isDancing = false;
-    this.danceTransitionState = 'none';
     this.currentDanceId = null;
     this.danceTime = 0;
     this.lastPhysicsTime = 0;
     danceAudio.stop();
-
-    // 1. Force all non-procedural bones (legs, knees, feet, ankles, IK, root, groove)
-    // and non-center bone positions back to exact rest transforms
-    if (this.mesh && this.mesh.skeleton) {
-      for (const bone of this.mesh.skeleton.bones) {
-        const rest = this.boneRestTransforms.get(bone);
-        if (!rest) continue;
-
-        if (!this.isProceduralBone(bone)) {
-          bone.position.copy(rest.position);
-          bone.quaternion.copy(rest.quaternion);
-        } else if (bone !== this.centerBone) {
-          bone.position.copy(rest.position);
-        }
-      }
-      this.mesh.updateMatrixWorld(true);
-    }
-
-    // 2. Clear all MMD facial morphs and morph states
-    if (this.mesh && this.mesh.morphTargetInfluences) {
-      this.mesh.morphTargetInfluences.fill(0);
-    }
-    this.exitMorphSnapshot = null;
-    this.currentMorphWeights = {};
-    this.targetMorphWeights = {};
-
-    // 3. Detach MMD animation clip & reset Bullet physics runtime
     if (this.model) {
       const runtime = this.model.runtime as any;
       if (runtime) {
@@ -601,8 +584,9 @@ export class ChenCharacter {
         } catch {}
       }
     }
+    this.resetDanceMorphs();
     this.setEmotion('normal');
-    this.onDanceEnd?.();
+    this.startPostDanceTransition(0.55);
   }
 
   /**
@@ -613,8 +597,11 @@ export class ChenCharacter {
     if (!this.mesh) return;
 
     if (this.isDancing) {
-      this.stopDance(true);
+      this.stopDance();
     }
+    this.isReturningFromDance = false;
+    this.postDanceSnapshots = [];
+
     if (motionId !== 'gentleWave') {
       this.currentGesture = 'none';
     }
@@ -640,6 +627,9 @@ export class ChenCharacter {
         onComplete: () => {
           if (options?.audioUrl) {
             this.stopStructuredMotion();
+          } else {
+            structuredMotionPlayer.stop(0.25);
+            this.startPostDanceTransition(0.55);
           }
           options?.onComplete?.();
         },
@@ -656,15 +646,17 @@ export class ChenCharacter {
         this.stopStructuredMotion();
       } else {
         structuredMotionPlayer.stop(0.2);
+        this.startPostDanceTransition(0.55);
       }
     }
   }
 
   stopStructuredMotion() {
-    structuredMotionPlayer.stop();
+    structuredMotionPlayer.stop(0.25);
     this.currentDanceId = null;
     danceAudio.stop();
     this.setEmotion('normal');
+    this.startPostDanceTransition(0.55);
   }
 
   get isStructuredMotionPlaying(): boolean {
@@ -701,89 +693,14 @@ export class ChenCharacter {
     const clampedDelta = Math.min(delta, 0.05);
 
     if (this.isDancing) {
-      if (this.danceTransitionState === 'blend_out') {
-        // Smooth crossfade out from dance pose back to procedural standing idle
-        this.danceTransitionTimer += clampedDelta;
-        const progress = Math.min(1.0, this.danceTransitionTimer / this.DANCE_BLEND_OUT_DURATION);
-        const alpha = smootherstep(progress);
-
-        // Advance idle timeline to compute live breathing, resting arms & gaze target
-        this.elapsedTime += clampedDelta;
-        this.updateProceduralIdle(clampedDelta);
-
-        // Slerp all bones from exit dance pose to procedural idle target / rest pose
-        if (this.mesh.skeleton) {
-          for (const bone of this.mesh.skeleton.bones) {
-            const snap = this.exitDanceSnapshot.get(bone);
-            if (!snap) continue;
-
-            const rest = this.boneRestTransforms.get(bone);
-            const isProc = this.isProceduralBone(bone);
-
-            let targetPos: THREE.Vector3;
-            let targetQuat: THREE.Quaternion;
-
-            if (bone === this.centerBone) {
-              targetPos = this.scratchTargetPos.copy(bone.position);
-              targetQuat = this.scratchTargetQuat.copy(bone.quaternion);
-            } else if (isProc) {
-              targetPos = rest ? rest.position : bone.position;
-              targetQuat = this.scratchTargetQuat.copy(bone.quaternion);
-            } else {
-              targetPos = rest ? rest.position : bone.position;
-              targetQuat = rest ? rest.quaternion : bone.quaternion;
-            }
-
-            bone.position.lerpVectors(snap.position, targetPos, alpha);
-            bone.quaternion.slerpQuaternions(snap.quaternion, targetQuat, alpha);
-          }
-        }
-
-        // Fade out leftover dance morph influences smoothly to 0
-        if (this.exitMorphSnapshot && this.mesh.morphTargetInfluences) {
-          const morphs = this.mesh.morphTargetInfluences;
-          const snapMorphs = this.exitMorphSnapshot;
-          const count = Math.min(morphs.length, snapMorphs.length);
-          for (let i = 0; i < count; i++) {
-            morphs[i] = THREE.MathUtils.lerp(snapMorphs[i], 0, alpha);
-          }
-        }
-
-        // Keep 3D Bullet physics active so hair and clothing settle naturally
-        if (this.physicsEnabled) {
-          this.updateIdlePhysics(clampedDelta);
-        }
-
-        if (progress >= 1.0) {
-          this.finishStopDance();
-        }
-      } else {
-        // Dance is actively animating (either blend_in or full dance)
-        this.danceTime += clampedDelta;
-        this.model.update(this.danceTime, { physics: this.physicsEnabled, ik: true });
-
-        if (this.danceTransitionState === 'blend_in') {
-          this.danceTransitionTimer += clampedDelta;
-          const progress = Math.min(1.0, this.danceTransitionTimer / this.DANCE_BLEND_IN_DURATION);
-          const alpha = smootherstep(progress);
-
-          if (this.mesh.skeleton) {
-            for (const bone of this.mesh.skeleton.bones) {
-              const snap = this.preDanceSnapshot.get(bone);
-              if (!snap) continue;
-
-              bone.position.lerpVectors(snap.position, bone.position, alpha);
-              bone.quaternion.slerpQuaternions(snap.quaternion, bone.quaternion, alpha);
-            }
-          }
-
-          if (progress >= 1.0) {
-            this.danceTransitionState = 'dancing';
-          }
-        }
-      }
+      this.danceTime += clampedDelta;
+      // Clamped delta to prevent physics explosion/stutters during dance; IK solves dance keyframes
+      this.model.update(this.danceTime, { physics: this.physicsEnabled, ik: true });
     } else {
       this.elapsedTime += clampedDelta;
+
+      // 0. Snappy post-dance transition slerp/lerp for non-procedural bones (legs, feet, IK, groove, twist)
+      this.updatePostDanceTransition(clampedDelta);
 
       // 1. Procedural idle motion (breathing, posture, arm resting pose, head tracking, blinking, gestures)
       this.updateProceduralIdle(clampedDelta);
@@ -801,7 +718,7 @@ export class ChenCharacter {
       }
     }
 
-    // 4. Smooth expression morph interpolation
+    // 3. Smooth expression morph interpolation
     this.updateMorphs(clampedDelta);
   }
 
@@ -904,28 +821,31 @@ export class ChenCharacter {
       }
     }
 
+    // Adaptive lerp multiplier: when returning from dance, blend rapidly (~0.55s) to idle rest
+    const rateMultiplier = this.isReturningFromDance ? 2.8 : 1.8;
+
     // Center bone bounce & grounded stance
     if (this.centerBone) {
-      this.centerBone.position.x = THREE.MathUtils.lerp(this.centerBone.position.x, this.centerBoneRestPos.x + centerOffsetX, delta * 8.0);
-      this.centerBone.position.y = THREE.MathUtils.lerp(this.centerBone.position.y, this.centerBoneRestPos.y + breath * 0.006 + centerOffsetY, delta * 8.0);
+      this.centerBone.position.x = THREE.MathUtils.lerp(this.centerBone.position.x, this.centerBoneRestPos.x + centerOffsetX, delta * 8.0 * rateMultiplier);
+      this.centerBone.position.y = THREE.MathUtils.lerp(this.centerBone.position.y, this.centerBoneRestPos.y + breath * 0.006 + centerOffsetY, delta * 8.0 * rateMultiplier);
       this.centerBone.position.z = this.centerBoneRestPos.z;
       this.centerBone.rotation.z = sway * 0.004;
     }
 
     // Pelvis hip roll & sway
     if (this.hipsBone) {
-      this.hipsBone.rotation.z = THREE.MathUtils.lerp(this.hipsBone.rotation.z, hipsRollTarget, delta * 4.5);
-      this.hipsBone.rotation.y = THREE.MathUtils.lerp(this.hipsBone.rotation.y, hipsYawTarget, delta * 4.5);
+      this.hipsBone.rotation.z = THREE.MathUtils.lerp(this.hipsBone.rotation.z, hipsRollTarget, delta * 5.0 * rateMultiplier);
+      this.hipsBone.rotation.y = THREE.MathUtils.lerp(this.hipsBone.rotation.y, hipsYawTarget, delta * 5.0 * rateMultiplier);
     }
 
     // Spine & chest 3D breathing expansion (natural diaphragm expansion)
     if (this.spineBone) {
-      this.spineBone.rotation.x = THREE.MathUtils.lerp(this.spineBone.rotation.x, breath * 0.012, delta * 3.5);
-      this.spineBone.rotation.z = THREE.MathUtils.lerp(this.spineBone.rotation.z, spineRoll, delta * 3.5);
-      this.spineBone.rotation.y = THREE.MathUtils.lerp(this.spineBone.rotation.y, spineYaw, delta * 3.5);
+      this.spineBone.rotation.x = THREE.MathUtils.lerp(this.spineBone.rotation.x, breath * 0.012, delta * 4.0 * rateMultiplier);
+      this.spineBone.rotation.z = THREE.MathUtils.lerp(this.spineBone.rotation.z, spineRoll, delta * 4.0 * rateMultiplier);
+      this.spineBone.rotation.y = THREE.MathUtils.lerp(this.spineBone.rotation.y, spineYaw, delta * 4.0 * rateMultiplier);
     }
     if (this.spine2Bone) {
-      this.spine2Bone.rotation.x = THREE.MathUtils.lerp(this.spine2Bone.rotation.x, breath * 0.018, delta * 3.5);
+      this.spine2Bone.rotation.x = THREE.MathUtils.lerp(this.spine2Bone.rotation.x, breath * 0.018, delta * 4.0 * rateMultiplier);
     }
 
     // Subtle shoulder rise and fall with breathing
@@ -999,31 +919,33 @@ export class ChenCharacter {
       }
     }
 
+    const armLerpRate = this.isReturningFromDance ? (delta * 12.0) : (delta * 6.5);
+
     if (this.leftArmBone) {
-      this.leftArmBone.rotation.z = THREE.MathUtils.lerp(this.leftArmBone.rotation.z, leftArmTargetZ, delta * 3.5);
-      this.leftArmBone.rotation.x = THREE.MathUtils.lerp(this.leftArmBone.rotation.x, leftArmTargetX, delta * 3.5);
-      this.leftArmBone.rotation.y = THREE.MathUtils.lerp(this.leftArmBone.rotation.y, leftArmTargetY, delta * 3.5);
+      this.leftArmBone.rotation.z = THREE.MathUtils.lerp(this.leftArmBone.rotation.z, leftArmTargetZ, armLerpRate);
+      this.leftArmBone.rotation.x = THREE.MathUtils.lerp(this.leftArmBone.rotation.x, leftArmTargetX, armLerpRate);
+      this.leftArmBone.rotation.y = THREE.MathUtils.lerp(this.leftArmBone.rotation.y, leftArmTargetY, armLerpRate);
     }
     if (this.leftElbowBone) {
-      this.leftElbowBone.rotation.z = THREE.MathUtils.lerp(this.leftElbowBone.rotation.z, leftElbowTargetZ, delta * 3.5);
-      this.leftElbowBone.rotation.x = THREE.MathUtils.lerp(this.leftElbowBone.rotation.x, leftElbowTargetX, delta * 3.5);
-      this.leftElbowBone.rotation.y = THREE.MathUtils.lerp(this.leftElbowBone.rotation.y, leftElbowTargetY, delta * 3.5);
+      this.leftElbowBone.rotation.z = THREE.MathUtils.lerp(this.leftElbowBone.rotation.z, leftElbowTargetZ, armLerpRate);
+      this.leftElbowBone.rotation.x = THREE.MathUtils.lerp(this.leftElbowBone.rotation.x, leftElbowTargetX, armLerpRate);
+      this.leftElbowBone.rotation.y = THREE.MathUtils.lerp(this.leftElbowBone.rotation.y, leftElbowTargetY, armLerpRate);
     }
     // Only apply procedural right arm and finger rotations if structured motion player is NOT driving them
     if (!structuredMotionPlayer.isPlaying) {
       if (this.rightArmBone) {
-        this.rightArmBone.rotation.z = THREE.MathUtils.lerp(this.rightArmBone.rotation.z, rightArmTargetZ, delta * 3.5);
-        this.rightArmBone.rotation.x = THREE.MathUtils.lerp(this.rightArmBone.rotation.x, rightArmTargetX, delta * 3.5);
-        this.rightArmBone.rotation.y = THREE.MathUtils.lerp(this.rightArmBone.rotation.y, rightArmTargetY, delta * 3.5);
+        this.rightArmBone.rotation.z = THREE.MathUtils.lerp(this.rightArmBone.rotation.z, rightArmTargetZ, armLerpRate);
+        this.rightArmBone.rotation.x = THREE.MathUtils.lerp(this.rightArmBone.rotation.x, rightArmTargetX, armLerpRate);
+        this.rightArmBone.rotation.y = THREE.MathUtils.lerp(this.rightArmBone.rotation.y, rightArmTargetY, armLerpRate);
       }
       if (this.rightElbowBone) {
-        this.rightElbowBone.rotation.z = THREE.MathUtils.lerp(this.rightElbowBone.rotation.z, rightElbowTargetZ, delta * 3.5);
-        this.rightElbowBone.rotation.x = THREE.MathUtils.lerp(this.rightElbowBone.rotation.x, rightElbowTargetX, delta * 3.5);
-        this.rightElbowBone.rotation.y = THREE.MathUtils.lerp(this.rightElbowBone.rotation.y, rightElbowTargetY, delta * 3.5);
+        this.rightElbowBone.rotation.z = THREE.MathUtils.lerp(this.rightElbowBone.rotation.z, rightElbowTargetZ, armLerpRate);
+        this.rightElbowBone.rotation.x = THREE.MathUtils.lerp(this.rightElbowBone.rotation.x, rightElbowTargetX, armLerpRate);
+        this.rightElbowBone.rotation.y = THREE.MathUtils.lerp(this.rightElbowBone.rotation.y, rightElbowTargetY, armLerpRate);
       }
       if (this.rightWristBone) {
-        this.rightWristBone.rotation.z = THREE.MathUtils.lerp(this.rightWristBone.rotation.z, rightWristTargetZ, delta * 3.5);
-        this.rightWristBone.rotation.x = THREE.MathUtils.lerp(this.rightWristBone.rotation.x, rightWristTargetX, delta * 3.5);
+        this.rightWristBone.rotation.z = THREE.MathUtils.lerp(this.rightWristBone.rotation.z, rightWristTargetZ, armLerpRate);
+        this.rightWristBone.rotation.x = THREE.MathUtils.lerp(this.rightWristBone.rotation.x, rightWristTargetX, armLerpRate);
       }
 
       // 3b. Natural Finger Articulation
@@ -1032,9 +954,10 @@ export class ChenCharacter {
         (effectivePose?.fingerCurl ?? 0) * this.customMotionWeight
       );
       if (this.fingerBones.length > 0) {
+        const fingerLerpRate = this.isReturningFromDance ? (delta * 14.0) : (delta * 7.0);
         for (const bone of this.fingerBones) {
           const curlAngle = targetFingerCurl * 0.42;
-          bone.rotation.z = THREE.MathUtils.lerp(bone.rotation.z, bone.name.startsWith('左') ? -curlAngle : curlAngle, delta * 5.0);
+          bone.rotation.z = THREE.MathUtils.lerp(bone.rotation.z, bone.name.startsWith('左') ? -curlAngle : curlAngle, fingerLerpRate);
         }
       }
     }
@@ -1148,14 +1071,16 @@ export class ChenCharacter {
       const clampedYaw = Math.max(-0.45, Math.min(0.45, targetYaw));
       const clampedPitch = Math.max(-0.25, Math.min(0.25, targetPitch));
 
+      const headLerpRate = this.isReturningFromDance ? (delta * 9.0) : (delta * 4.5);
+
       if (this.neckBone) {
-        this.neckBone.rotation.y = THREE.MathUtils.lerp(this.neckBone.rotation.y, clampedYaw * 0.35, delta * 4);
-        this.neckBone.rotation.x = THREE.MathUtils.lerp(this.neckBone.rotation.x, clampedPitch * 0.35, delta * 4);
-        this.neckBone.rotation.z = THREE.MathUtils.lerp(this.neckBone.rotation.z, gestureHeadRoll * 0.3, delta * 4);
+        this.neckBone.rotation.y = THREE.MathUtils.lerp(this.neckBone.rotation.y, clampedYaw * 0.35, headLerpRate);
+        this.neckBone.rotation.x = THREE.MathUtils.lerp(this.neckBone.rotation.x, clampedPitch * 0.35, headLerpRate);
+        this.neckBone.rotation.z = THREE.MathUtils.lerp(this.neckBone.rotation.z, gestureHeadRoll * 0.3, headLerpRate);
       }
-      this.headBone.rotation.y = THREE.MathUtils.lerp(this.headBone.rotation.y, clampedYaw * 0.65, delta * 4);
-      this.headBone.rotation.x = THREE.MathUtils.lerp(this.headBone.rotation.x, clampedPitch * 0.65, delta * 4);
-      this.headBone.rotation.z = THREE.MathUtils.lerp(this.headBone.rotation.z, gestureHeadRoll * 0.7, delta * 4);
+      this.headBone.rotation.y = THREE.MathUtils.lerp(this.headBone.rotation.y, clampedYaw * 0.65, headLerpRate);
+      this.headBone.rotation.x = THREE.MathUtils.lerp(this.headBone.rotation.x, clampedPitch * 0.65, headLerpRate);
+      this.headBone.rotation.z = THREE.MathUtils.lerp(this.headBone.rotation.z, gestureHeadRoll * 0.7, headLerpRate);
     }
   }
 

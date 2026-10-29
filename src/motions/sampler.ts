@@ -7,7 +7,7 @@ import type {
 
 export interface PlaybackOptions {
   loop?: boolean;
-  blendDuration?: number;   // Crossfade in seconds (default 0.45s)
+  blendDuration?: number;   // Crossfade in seconds (default 0.35s)
   allowLookAt?: boolean;     // Keep cursor look-at eye tracking active on head/neck (default true)
   speed?: number;           // Playback speed multiplier (default 1.0)
   onComplete?: () => void;
@@ -17,17 +17,7 @@ interface BoneCache {
   bone: THREE.Bone;
   restPosition: THREE.Vector3;
   restQuaternion: THREE.Quaternion;
-  startPosition: THREE.Vector3;
-  startQuaternion: THREE.Quaternion;
-  exitPosition: THREE.Vector3;
-  exitQuaternion: THREE.Quaternion;
   isHeadOrNeck: boolean;
-}
-
-// Ken Perlin's quintic smootherstep (zero 1st & 2nd derivative at ends -> zero jerk / snap)
-function smootherstep(x: number): number {
-  const c = Math.max(0, Math.min(1, x));
-  return c * c * c * (c * (c * 6 - 15) + 10);
 }
 
 /**
@@ -39,7 +29,6 @@ export class StructuredMotionPlayer {
   public activeMotion: IVmdStructuredMotion | null = null;
   public currentTime = 0;
   public isPlaying = false;
-  public isBlendingOut = false;
   public loop = true;
   public allowLookAt = true;
   public speed = 1.0;
@@ -47,7 +36,7 @@ export class StructuredMotionPlayer {
   // Crossfade weight (0.0 to 1.0)
   public weight = 0;
   private targetWeight = 0;
-  private blendDuration = 0.45;
+  private blendDuration = 0.35;
   private onCompleteCallback?: () => void;
 
   // Cached bone references & rest transforms
@@ -78,10 +67,6 @@ export class StructuredMotionPlayer {
         bone,
         restPosition: bone.position.clone(),
         restQuaternion: bone.quaternion.clone(),
-        startPosition: bone.position.clone(),
-        startQuaternion: bone.quaternion.clone(),
-        exitPosition: bone.position.clone(),
-        exitQuaternion: bone.quaternion.clone(),
         isHeadOrNeck,
       });
     }
@@ -94,11 +79,10 @@ export class StructuredMotionPlayer {
     this.activeMotion = motion;
     this.currentTime = 0;
     this.isPlaying = true;
-    this.isBlendingOut = false;
     this.loop = options.loop ?? true;
     this.allowLookAt = options.allowLookAt ?? true;
     this.speed = options.speed ?? 1.0;
-    this.blendDuration = options.blendDuration ?? 0.45;
+    this.blendDuration = options.blendDuration ?? 0.35;
     this.onCompleteCallback = options.onComplete;
 
     this.boneHintIndices.clear();
@@ -106,38 +90,15 @@ export class StructuredMotionPlayer {
 
     this.targetWeight = 1.0;
     this.weight = 0.0;
-
-    // Capture starting snapshot of every bone in this motion from its live transform
-    for (const boneName of Object.keys(motion.bones)) {
-      const cache = this.boneMap.get(boneName);
-      if (cache) {
-        cache.startPosition.copy(cache.bone.position);
-        cache.startQuaternion.copy(cache.bone.quaternion);
-      }
-    }
   }
 
   /**
    * Stops playback with an optional smooth blend-out.
    */
-  public stop(blendDuration = 0.45) {
+  public stop(blendDuration = 0.25) {
     if (!this.isPlaying) return;
-    if (this.isBlendingOut) return;
-
-    this.isBlendingOut = true;
     this.blendDuration = blendDuration;
     this.targetWeight = 0.0;
-
-    // Capture exit snapshot of each bone at this exact moment
-    if (this.activeMotion) {
-      for (const boneName of Object.keys(this.activeMotion.bones)) {
-        const cache = this.boneMap.get(boneName);
-        if (cache) {
-          cache.exitPosition.copy(cache.bone.position);
-          cache.exitQuaternion.copy(cache.bone.quaternion);
-        }
-      }
-    }
   }
 
   /**
@@ -159,7 +120,6 @@ export class StructuredMotionPlayer {
         if (this.weight <= 0) {
           this.isPlaying = false;
           this.activeMotion = null;
-          this.isBlendingOut = false;
           this.restoreRestPose();
           this.onCompleteCallback?.();
           return;
@@ -169,31 +129,28 @@ export class StructuredMotionPlayer {
       this.weight = this.targetWeight;
     }
 
-    if (this.weight <= 0 && !this.isBlendingOut) return;
+    if (this.weight <= 0) return;
 
     // 2. Advance motion timeline
-    if (!this.isBlendingOut) {
-      this.currentTime += delta * this.speed;
-      const duration = this.activeMotion.metadata.durationSeconds || (this.activeMotion.metadata.totalFrames / 30);
+    this.currentTime += delta * this.speed;
+    const duration = this.activeMotion.metadata.durationSeconds || (this.activeMotion.metadata.totalFrames / 30);
 
-      if (this.currentTime >= duration) {
-        if (this.loop) {
-          this.currentTime = this.currentTime % duration;
-          this.boneHintIndices.clear();
-          this.morphHintIndices.clear();
-        } else {
-          // Reached end of non-looping motion: initiate smooth blend-out back to idle
-          this.stop(this.blendDuration);
-        }
+    if (this.currentTime >= duration) {
+      if (this.loop) {
+        this.currentTime = this.currentTime % duration;
+        this.boneHintIndices.clear();
+        this.morphHintIndices.clear();
+      } else {
+        this.stop(this.blendDuration);
+        return;
       }
     }
 
-    const duration = this.activeMotion.metadata.durationSeconds || (this.activeMotion.metadata.totalFrames / 30);
-    const t = Math.min(this.currentTime, duration);
+    const t = this.currentTime;
     const bones = this.activeMotion.bones;
     const morphs = this.activeMotion.morphs;
 
-    // 3. Evaluate bone tracks (All 195–319 bones with smootherstep crossfading)
+    // 3. Evaluate bone tracks (All 195–319 bones with Slerp & Lerp)
     for (const [boneName, keyframes] of Object.entries(bones)) {
       if (!keyframes || keyframes.length === 0) continue;
 
@@ -203,26 +160,23 @@ export class StructuredMotionPlayer {
       // If user look-at tracking is enabled, let procedural lookAt control head/neck
       if (this.allowLookAt && cache.isHeadOrNeck) continue;
 
+      // Sample keyframe position & rotation
+      this.sampleBoneTrack(boneName, keyframes, t);
+
       const bone = cache.bone;
+      const rest = cache.restPosition;
 
-      if (this.isBlendingOut) {
-        // Smoothly blend from exit pose back to rest pose
-        const alpha = smootherstep(1.0 - this.weight); // 0 -> 1 as weight drops to 0
-        bone.quaternion.copy(cache.exitQuaternion).slerp(cache.restQuaternion, alpha);
-        bone.position.lerpVectors(cache.exitPosition, cache.restPosition, alpha);
+      // Coordinate space mapping (MMD left-handed raw -> Three.js skeleton):
+      // X = rest.x + posX
+      // Y = rest.y + posY
+      // Z = rest.z - posZ
+      // Quat = [-rotX, -rotY, rotZ, rotW]
+      if (this.weight >= 0.999) {
+        bone.quaternion.copy(this.scratchTargetQ);
+        bone.position.copy(this.scratchPos);
       } else {
-        // Sample keyframe position & rotation
-        this.sampleBoneTrack(boneName, keyframes, t);
-
-        if (this.weight >= 0.999) {
-          bone.quaternion.copy(this.scratchTargetQ);
-          bone.position.copy(this.scratchPos);
-        } else {
-          // Smoothly blend from starting pose into keyframe track
-          const alpha = smootherstep(this.weight); // 0 -> 1 as weight rises to 1
-          bone.quaternion.copy(cache.startQuaternion).slerp(this.scratchTargetQ, alpha);
-          bone.position.lerpVectors(cache.startPosition, this.scratchPos, alpha);
-        }
+        bone.quaternion.slerp(this.scratchTargetQ, this.weight);
+        bone.position.lerp(this.scratchPos, this.weight);
       }
     }
 
