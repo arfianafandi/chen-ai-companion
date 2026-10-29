@@ -1,5 +1,59 @@
 import type { EmotionType } from '../types';
 
+export interface IVmdBoneKeyframe {
+  frame: number;
+  time: number;
+  position: [number, number, number];
+  rotation: [number, number, number, number];
+  interpolation?: number[];
+}
+
+export interface IVmdMorphKeyframe {
+  frame: number;
+  time: number;
+  weight: number;
+}
+
+export interface IVmdCameraKeyframe {
+  frame: number;
+  time: number;
+  distance: number;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  fov: number;
+  perspective: boolean;
+  interpolation?: number[];
+}
+
+export interface IVmdIKInfo {
+  name: string;
+  enable: boolean;
+}
+
+export interface IVmdIKKeyframe {
+  frame: number;
+  time: number;
+  show: boolean;
+  ikList: IVmdIKInfo[];
+}
+
+export interface IVmdMetadata {
+  version: string;
+  modelName: string;
+  totalFrames: number;
+  durationSeconds: number;
+  fps: number;
+  coordSystem: string;
+}
+
+export interface IVmdStructuredMotion {
+  metadata: IVmdMetadata;
+  bones: Record<string, IVmdBoneKeyframe[]>;
+  morphs: Record<string, IVmdMorphKeyframe[]>;
+  cameras?: IVmdCameraKeyframe[];
+  ik?: IVmdIKKeyframe[];
+}
+
 export interface MotionPoseData {
   // Head & Neck
   headYaw: number;      // -0.5 to 0.5 (turn left/right)

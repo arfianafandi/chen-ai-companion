@@ -15,8 +15,11 @@ import {
   IDLE_GESTURES, 
   evaluateIdleGesture 
 } from './motions/idle';
+import { structuredMotionPlayer, type PlaybackOptions } from './motions/sampler';
+import { STRUCTURED_MOTIONS, type StructuredMotionEntry } from './motions/data';
 
-export type { IdleGesture };
+export type { IdleGesture, StructuredMotionEntry, PlaybackOptions };
+export { STRUCTURED_MOTIONS, structuredMotionPlayer };
 
 export class ChenCharacter {
   public model: ThreeMmdModel | null = null;
@@ -167,6 +170,9 @@ export class ChenCharacter {
     this.model = mmdModel;
     this.root = mmdModel.root;
     this.mesh = mmdModel.mesh;
+    if (this.mesh) {
+      structuredMotionPlayer.attachMesh(this.mesh);
+    }
 
     // 3. Bind mesh & runtime external physics data so Bullet WASM simulates all 310 rigid bodies!
     const runtime = this.model.runtime as any;
@@ -353,6 +359,9 @@ export class ChenCharacter {
 
   public triggerGesture(gesture: IdleGesture) {
     if (this.isDancing) return;
+    if (structuredMotionPlayer.isPlaying) {
+      structuredMotionPlayer.stop(0.2);
+    }
     this.currentGesture = gesture;
     this.activeCustomMotion = null;
     this.previewPose = null;
@@ -363,6 +372,9 @@ export class ChenCharacter {
 
   public playTrainedMotion(motion: TrainedMotion) {
     if (this.isDancing) return;
+    if (structuredMotionPlayer.isPlaying) {
+      structuredMotionPlayer.stop(0.2);
+    }
     this.activeCustomMotion = motion;
     this.previewPose = null;
     this.currentGesture = 'none';
@@ -390,6 +402,9 @@ export class ChenCharacter {
 
   async playDance(motionUrl: string, audioUrl: string, danceId: string): Promise<void> {
     if (!this.model || !this.loader) return;
+    if (structuredMotionPlayer.isPlaying) {
+      structuredMotionPlayer.stop(0.2);
+    }
 
     try {
       this.isDancing = true;
@@ -438,6 +453,62 @@ export class ChenCharacter {
     this.setEmotion('normal');
   }
 
+  /**
+   * Plays a 100% full-complexity structured TypeScript motion (200+ bones, fingers, expressions)
+   * loaded dynamically from compiled VMD datasets.
+   */
+  async playStructuredMotion(motionId: string, options?: PlaybackOptions & { audioUrl?: string }): Promise<void> {
+    if (!this.mesh) return;
+
+    if (this.isDancing) {
+      this.stopDance();
+    }
+    this.currentGesture = 'none';
+    this.activeCustomMotion = null;
+    this.previewPose = null;
+
+    const entry = STRUCTURED_MOTIONS.find(m => m.id === motionId);
+    if (!entry) {
+      console.warn('Structured motion not found:', motionId);
+      return;
+    }
+
+    try {
+      this.currentDanceId = motionId;
+      const data = await entry.load();
+      structuredMotionPlayer.play(data, {
+        loop: options?.loop ?? true,
+        allowLookAt: options?.allowLookAt ?? true,
+        blendDuration: options?.blendDuration ?? 0.35,
+        speed: options?.speed ?? 1.0,
+        onComplete: () => {
+          this.stopStructuredMotion();
+          options?.onComplete?.();
+        },
+      });
+
+      if (options?.audioUrl) {
+        await danceAudio.play(options.audioUrl, () => {
+          this.stopStructuredMotion();
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load structured motion:', err);
+      this.stopStructuredMotion();
+    }
+  }
+
+  stopStructuredMotion() {
+    structuredMotionPlayer.stop();
+    this.currentDanceId = null;
+    danceAudio.stop();
+    this.setEmotion('normal');
+  }
+
+  get isStructuredMotionPlaying(): boolean {
+    return structuredMotionPlayer.isPlaying;
+  }
+
   public setOutlineEnabled(enabled: boolean) {
     this.outlineEnabled = enabled;
     if (this.model && this.model.outlineMeshes) {
@@ -477,7 +548,14 @@ export class ChenCharacter {
       // 1. Procedural idle motion (breathing, posture, arm resting pose, head tracking, blinking, gestures)
       this.updateProceduralIdle(clampedDelta);
 
-      // 2. Full 3D Bullet physics simulation in idle (hair, twintails, skirt, ribbons, chest dynamics)
+      // 2. High-Fidelity Structured TypeScript Motion Player (Exact 200+ bones keyframe choreography!)
+      if (structuredMotionPlayer.isPlaying) {
+        structuredMotionPlayer.update(clampedDelta, (morphName, weight) => {
+          this.applyMorphWeight(morphName, weight);
+        });
+      }
+
+      // 3. Full 3D Bullet physics simulation in idle & structured motions (hair, twintails, skirt, ribbons, chest dynamics)
       if (this.physicsEnabled) {
         this.updateIdlePhysics(clampedDelta);
       }

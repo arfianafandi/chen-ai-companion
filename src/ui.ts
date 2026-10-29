@@ -1,5 +1,5 @@
 import { affection, GIFTS, type GiftItem } from './affection';
-import { ChenCharacter } from './character';
+import { ChenCharacter, STRUCTURED_MOTIONS } from './character';
 import { SceneManager, type CameraPreset } from './scene';
 import { ai, stt } from './ai';
 import { tts, sfx, chenVoice, danceAudio } from './audio';
@@ -146,17 +146,22 @@ export class UIManager {
         </div>
         
         <div class="drawer-section">
-          <h4>💃 DANCE CHOREOGRAPHY</h4>
+          <h4>💃 DANCE CHOREOGRAPHY <span style="font-size: 0.68rem; color: #00e5ff; background: rgba(0, 229, 255, 0.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 229, 255, 0.3);">⚡ 200+ BONE TS ENGINE</span></h4>
+          <p style="font-size: 0.78rem; color: #88a0b0; margin-bottom: 8px;">
+            Koreografi lengkap berbasis data TypeScript dengan 200–319 tulang, artikulasi sendi 30 jari, dan fisika Bullet realtime:
+          </p>
           <div class="dance-list">
-            ${DANCE_TRACKS.map(t => `
+            ${DANCE_TRACKS.map(t => {
+              const isStructured = STRUCTURED_MOTIONS.some(m => m.id === t.id);
+              return `
               <div class="dance-card" data-dance-id="${t.id}">
                 <div class="dance-card-info">
-                  <strong>${t.name}</strong>
+                  <strong>${t.name} ${isStructured ? '<span style="color:#00e5ff; font-size:0.72rem; font-weight:normal;">[⚡ TS FULL VMD]</span>' : ''}</strong>
                   <p>${t.description}</p>
                 </div>
                 <button class="dance-play-btn" data-dance="${t.id}">▶ Play</button>
               </div>
-            `).join('')}
+            `;}).join('')}
           </div>
           <button class="stop-dance-btn" id="stop-dance-btn" style="display: none;">
             ⏹ Stop Dance & Reset Idle
@@ -847,6 +852,7 @@ export class UIManager {
     stopDanceBtn.addEventListener('click', () => {
       sfx.playClick();
       this.chen.stopDance();
+      this.chen.stopStructuredMotion();
       stopDanceBtn.style.display = 'none';
       this.showSpeechBubble('Dance complete! Did you enjoy it, Administrator? [EMOTE:smile]', 'smile');
     });
@@ -862,13 +868,48 @@ export class UIManager {
       });
     });
 
-    // 9b. Gesture Trigger Buttons (Anime Motions)
+    // 9b. Gesture Trigger Buttons (Anime Motions & Full VMD Datasets)
     const gestureBtns = this.container.querySelectorAll('.gesture-btn');
     gestureBtns.forEach(b => {
       b.addEventListener('click', (e) => {
         sfx.playClick();
         const gesture = (e.currentTarget as HTMLElement).dataset.gesture as any;
-        if (gesture) {
+        if (!gesture) return;
+
+        if (gesture === 'pokedance_bounce') {
+          // Play authentic full Poke Dance keyframe motion (195 bones) with cursor look-at
+          this.chen.playStructuredMotion('pokedance', {
+            loop: false,
+            allowLookAt: true,
+            blendDuration: 0.35,
+            onComplete: () => {
+              this.showSpeechBubble('Poke Dance groove complete! [EMOTE:happy]', 'happy');
+            }
+          });
+          this.showSpeechBubble('Menarikan gerakan otentik Poke Dance (195 tulang)! 🎵', 'happy');
+        } else if (gesture === 'playful_neko') {
+          // Play authentic full Yurusite Neko keyframe motion (244 bones, 30 finger joints)
+          this.chen.playStructuredMotion('yurusiteNeko', {
+            loop: false,
+            allowLookAt: true,
+            blendDuration: 0.35,
+            onComplete: () => {
+              this.showSpeechBubble('Nyaa~ did you like my cat paws, Administrator? [EMOTE:blush]', 'blush');
+            }
+          });
+          this.showSpeechBubble('Menarikan gerakan otentik Yurusite Neko (244 tulang & 30 jari)! 🐾', 'happy');
+        } else if (gesture === 'idol_cheer') {
+          // Play authentic full Michi no Timothy keyframe motion (319 bones) with active look-at
+          this.chen.playStructuredMotion('michinoTimothy', {
+            loop: false,
+            allowLookAt: true,
+            blendDuration: 0.35,
+            onComplete: () => {
+              this.showSpeechBubble('Always giving my 100% support for you! [EMOTE:happy]', 'happy');
+            }
+          });
+          this.showSpeechBubble('Sorak semangat idol otentik Michi no Timothy (319 tulang)! 🌟', 'happy');
+        } else {
           this.chen.triggerGesture(gesture);
         }
       });
@@ -1616,7 +1657,16 @@ export class UIManager {
     const stopBtn = this.container.querySelector('#stop-dance-btn') as HTMLElement;
     stopBtn.style.display = 'block';
 
-    this.chen.playDance(track.motionUrl, track.audioUrl, track.id);
+    const hasStructured = STRUCTURED_MOTIONS.some(m => m.id === danceId);
+    if (hasStructured) {
+      this.chen.playStructuredMotion(danceId, {
+        audioUrl: track.audioUrl,
+        loop: true,
+        allowLookAt: danceId === 'michinoTimothy',
+      });
+    } else {
+      this.chen.playDance(track.motionUrl, track.audioUrl, track.id);
+    }
   }
 
   showSpeechBubble(text: string, emotion: EmotionType = 'normal', durationSeconds: number = 8) {
