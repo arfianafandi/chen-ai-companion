@@ -193,6 +193,9 @@ export class UIManager {
             <button class="gesture-btn" data-gesture="thinking_pose">🤔 Berpikir</button>
             <button class="gesture-btn" data-gesture="cute_nod">✨ Mengangguk Manis</button>
             <button class="gesture-btn" data-gesture="stretch_relax">🍃 Santai / Rileks</button>
+            <button class="gesture-btn" data-gesture="pokedance_bounce">🎵 Poke Bounce & Sway</button>
+            <button class="gesture-btn" data-gesture="playful_neko">🐾 Playful Neko Paws</button>
+            <button class="gesture-btn" data-gesture="idol_cheer">🌟 Idol Cheer Support</button>
           </div>
         </div>
 

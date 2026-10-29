@@ -32,10 +32,12 @@ export const nekoPaws: TrainedMotion = {
     rightElbowZ: 0.78,
     rightWristZ: 0.25,
     rightWristX: -0.12,
-    smile: 0.65,
+    smile: 0.75,
     blush: 0.85,
     wink: 0.0,
     serious: 0.0,
+    fingerCurl: 0.88,
+    hipsRoll: 0.05,
     dynamicsType: 'hand_wave',
   },
 };

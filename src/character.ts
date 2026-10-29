@@ -57,6 +57,7 @@ export class ChenCharacter {
   private rightArmBone: THREE.Bone | null = null;
   private rightElbowBone: THREE.Bone | null = null;
   private rightWristBone: THREE.Bone | null = null;
+  private fingerBones: THREE.Bone[] = [];
 
   // Head tracking (Target at Chen's eye level y=18.88)
   public targetLookAt = new THREE.Vector3(0, 18.8, 16.0);
@@ -235,6 +236,7 @@ export class ChenCharacter {
         else if (name === '右腕') this.rightArmBone = bone;
         else if (name === '右ひじ') this.rightElbowBone = bone;
         else if (name === '右手首') this.rightWristBone = bone;
+        else if (name.includes('指')) this.fingerBones.push(bone);
       }
     }
 
@@ -525,32 +527,6 @@ export class ChenCharacter {
     const spineRoll = sway * 0.008;
     const spineYaw = Math.cos(this.swayTimer * 0.5) * 0.015;
 
-    // Feet stay firmly grounded in authentic stance; subtle vertical chest breath bounce
-    if (this.centerBone) {
-      this.centerBone.position.x = this.centerBoneRestPos.x;
-      this.centerBone.position.y = this.centerBoneRestPos.y + breath * 0.006;
-      this.centerBone.position.z = this.centerBoneRestPos.z;
-      this.centerBone.rotation.z = sway * 0.004;
-    }
-
-    // Spine & chest 3D breathing expansion (natural diaphragm expansion)
-    if (this.spineBone) {
-      this.spineBone.rotation.x = THREE.MathUtils.lerp(this.spineBone.rotation.x, breath * 0.012, delta * 3.5);
-      this.spineBone.rotation.z = THREE.MathUtils.lerp(this.spineBone.rotation.z, spineRoll, delta * 3.5);
-      this.spineBone.rotation.y = THREE.MathUtils.lerp(this.spineBone.rotation.y, spineYaw, delta * 3.5);
-    }
-    if (this.spine2Bone) {
-      this.spine2Bone.rotation.x = THREE.MathUtils.lerp(this.spine2Bone.rotation.x, breath * 0.018, delta * 3.5);
-    }
-
-    // Subtle shoulder rise and fall with breathing
-    if (this.leftShoulderBone) {
-      this.leftShoulderBone.rotation.z = -breath * 0.008;
-    }
-    if (this.rightShoulderBone) {
-      this.rightShoulderBone.rotation.z = breath * 0.008;
-    }
-
     // 2. Automatic Idle Gesture State Machine & Custom Trained Motion Engine
     const effectivePose = this.previewPose || (this.activeCustomMotion ? this.activeCustomMotion.pose : null);
     if (this.previewPose) {
@@ -596,6 +572,53 @@ export class ChenCharacter {
       breath,
       sway,
     });
+
+    // 2b. Center Bounce & Pelvis / Hip Sway (learned from Poke Dance & Yurusite Neko)
+    let centerOffsetY = (gestureOutput?.centerOffsetY ?? 0);
+    let centerOffsetX = (gestureOutput?.centerOffsetX ?? 0);
+    let hipsRollTarget = (gestureOutput?.hipsRoll ?? 0);
+    let hipsYawTarget = (gestureOutput?.hipsYaw ?? 0);
+
+    if (effectivePose && this.customMotionWeight > 0) {
+      const w = this.customMotionWeight;
+      if (effectivePose.hipsRoll !== undefined) hipsRollTarget += effectivePose.hipsRoll * w;
+      if (effectivePose.hipsYaw !== undefined) hipsYawTarget += effectivePose.hipsYaw * w;
+      if (effectivePose.dynamicsType === 'swaying') {
+        hipsRollTarget += Math.sin((this.activeCustomMotion ? this.customMotionTimer : this.elapsedTime) * 3.2) * 0.14 * w;
+      }
+    }
+
+    // Center bone bounce & grounded stance
+    if (this.centerBone) {
+      this.centerBone.position.x = THREE.MathUtils.lerp(this.centerBone.position.x, this.centerBoneRestPos.x + centerOffsetX, delta * 8.0);
+      this.centerBone.position.y = THREE.MathUtils.lerp(this.centerBone.position.y, this.centerBoneRestPos.y + breath * 0.006 + centerOffsetY, delta * 8.0);
+      this.centerBone.position.z = this.centerBoneRestPos.z;
+      this.centerBone.rotation.z = sway * 0.004;
+    }
+
+    // Pelvis hip roll & sway
+    if (this.hipsBone) {
+      this.hipsBone.rotation.z = THREE.MathUtils.lerp(this.hipsBone.rotation.z, hipsRollTarget, delta * 4.5);
+      this.hipsBone.rotation.y = THREE.MathUtils.lerp(this.hipsBone.rotation.y, hipsYawTarget, delta * 4.5);
+    }
+
+    // Spine & chest 3D breathing expansion (natural diaphragm expansion)
+    if (this.spineBone) {
+      this.spineBone.rotation.x = THREE.MathUtils.lerp(this.spineBone.rotation.x, breath * 0.012, delta * 3.5);
+      this.spineBone.rotation.z = THREE.MathUtils.lerp(this.spineBone.rotation.z, spineRoll, delta * 3.5);
+      this.spineBone.rotation.y = THREE.MathUtils.lerp(this.spineBone.rotation.y, spineYaw, delta * 3.5);
+    }
+    if (this.spine2Bone) {
+      this.spine2Bone.rotation.x = THREE.MathUtils.lerp(this.spine2Bone.rotation.x, breath * 0.018, delta * 3.5);
+    }
+
+    // Subtle shoulder rise and fall with breathing
+    if (this.leftShoulderBone) {
+      this.leftShoulderBone.rotation.z = -breath * 0.008;
+    }
+    if (this.rightShoulderBone) {
+      this.rightShoulderBone.rotation.z = breath * 0.008;
+    }
 
     // Apply spine adjustments from trained motion
     if (effectivePose && this.customMotionWeight > 0 && this.spineBone) {
@@ -683,6 +706,19 @@ export class ChenCharacter {
     if (this.rightWristBone) {
       this.rightWristBone.rotation.z = THREE.MathUtils.lerp(this.rightWristBone.rotation.z, rightWristTargetZ, delta * 3.5);
       this.rightWristBone.rotation.x = THREE.MathUtils.lerp(this.rightWristBone.rotation.x, rightWristTargetX, delta * 3.5);
+    }
+
+    // 3b. Natural Finger Articulation (Curled Neko Paws / Soft Hands)
+    const targetFingerCurl = Math.max(
+      (gestureOutput?.fingerCurl ?? 0) * this.gestureWeight,
+      (effectivePose?.fingerCurl ?? 0) * this.customMotionWeight
+    );
+    if (this.fingerBones.length > 0) {
+      for (const bone of this.fingerBones) {
+        // Bend finger phalanges inwards on their natural flexion axis
+        const curlAngle = targetFingerCurl * 0.42;
+        bone.rotation.z = THREE.MathUtils.lerp(bone.rotation.z, bone.name.startsWith('左') ? -curlAngle : curlAngle, delta * 5.0);
+      }
     }
 
     // 4. Natural Blinking with Anime Double-Blink

@@ -162,6 +162,54 @@ class DanceAudioManager {
 
 export const danceAudio = new DanceAudioManager();
 
+/**
+ * Text-Aware Phonetic Vowel Extractor
+ * Inspired by MMD vocal lip-sync analysis (あ, い, う, え, お).
+ * Maps natural speech text (Indonesian, English, Japanese, Chinese) into expressive vowel visemes.
+ */
+export function extractPhoneticVowels(text: string): { vowel: string; intensity: number }[] {
+  const clean = text.toLowerCase().replace(/\[.*?\]/g, '').trim();
+  const sequence: { vowel: string; intensity: number }[] = [];
+
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean[i];
+    if (/[.,!?;:\n]/.test(char)) {
+      // Pause / closed mouth
+      sequence.push({ vowel: 'ん', intensity: 0 });
+      sequence.push({ vowel: 'ん', intensity: 0 });
+    } else if (/\s/.test(char)) {
+      sequence.push({ vowel: 'ん', intensity: 0.05 });
+    } else if (/[aáàâä]/.test(char) || char === 'あ' || char === 'ア') {
+      sequence.push({ vowel: 'あ', intensity: 0.85 });
+    } else if (/[iíìîï]/.test(char) || char === 'い' || char === 'イ') {
+      sequence.push({ vowel: 'い', intensity: 0.8 });
+    } else if (/[uúùûü]/.test(char) || char === 'う' || char === 'ウ') {
+      sequence.push({ vowel: 'う', intensity: 0.75 });
+    } else if (/[eéèêë]/.test(char) || char === 'え' || char === 'エ') {
+      sequence.push({ vowel: 'え', intensity: 0.8 });
+    } else if (/[oóòôö]/.test(char) || char === 'お' || char === 'オ') {
+      sequence.push({ vowel: 'お', intensity: 0.85 });
+    } else if (/[bcdfghjklmnpqrstvwxyz]/.test(char)) {
+      // Consonants soften preceding vowel
+      if (sequence.length > 0 && sequence[sequence.length - 1].intensity > 0) {
+        sequence.push({ vowel: sequence[sequence.length - 1].vowel, intensity: 0.35 });
+      }
+    }
+  }
+
+  if (sequence.length === 0) {
+    return [
+      { vowel: 'あ', intensity: 0.75 },
+      { vowel: 'い', intensity: 0.7 },
+      { vowel: 'う', intensity: 0.65 },
+      { vowel: 'え', intensity: 0.75 },
+      { vowel: 'お', intensity: 0.8 },
+    ];
+  }
+
+  return sequence;
+}
+
 // AUTHENTIC VOICE AUDIO PLAYER (Real Studio Anime Voice Lines with Synchronized Lip-Sync)
 export class ChenVoicePlayer {
   private currentAudio: HTMLAudioElement | null = null;
@@ -178,7 +226,7 @@ export class ChenVoicePlayer {
     } catch {}
   }
 
-  playVoice(voiceKey: string): Promise<boolean> {
+  playVoice(voiceKey: string, spokenText?: string): Promise<boolean> {
     if (!this.enabled) return Promise.resolve(false);
 
     this.stop();
@@ -193,7 +241,7 @@ export class ChenVoicePlayer {
     return new Promise((resolve) => {
       audio.onplay = () => {
         this.isPlaying = true;
-        this.startLipSync();
+        this.startLipSync(spokenText);
       };
       audio.onended = () => {
         this.finishVoice();
@@ -212,20 +260,26 @@ export class ChenVoicePlayer {
     });
   }
 
-  private startLipSync() {
-    const vowels = ['あ', 'い', 'う', 'え', 'お'];
+  private startLipSync(spokenText?: string) {
+    const phonemes = spokenText ? extractPhoneticVowels(spokenText) : [
+      { vowel: 'あ', intensity: 0.75 },
+      { vowel: 'い', intensity: 0.7 },
+      { vowel: 'う', intensity: 0.65 },
+      { vowel: 'え', intensity: 0.75 },
+      { vowel: 'お', intensity: 0.8 },
+    ];
     let step = 0;
     if (this.lipSyncInterval !== null) clearInterval(this.lipSyncInterval);
 
     this.lipSyncInterval = window.setInterval(() => {
       if (!this.isPlaying) return;
-      const vowel = vowels[step % vowels.length];
-      const intensity = 0.4 + Math.sin(step * 0.9) * 0.35 + Math.random() * 0.25;
+      const p = phonemes[step % phonemes.length];
+      const intensity = p.intensity > 0 ? p.intensity * (0.8 + Math.random() * 0.3) : 0;
       if (this.onLipSyncUpdate) {
-        this.onLipSyncUpdate(vowel, Math.max(0, Math.min(1, intensity)));
+        this.onLipSyncUpdate(p.vowel, Math.max(0, Math.min(1, intensity)));
       }
       step++;
-    }, 95);
+    }, 85);
   }
 
   private finishVoice() {
@@ -313,20 +367,20 @@ export class TTSManager {
         utterance.voice = targetVoice;
       }
 
-      const vowels = ['あ', 'い', 'う', 'え', 'お'];
+      const phonemes = extractPhoneticVowels(cleanText);
 
       utterance.onstart = () => {
         this.isSpeaking = true;
         let step = 0;
         this.lipSyncInterval = window.setInterval(() => {
           if (!this.isSpeaking) return;
-          const vowel = vowels[step % vowels.length];
-          const intensity = 0.35 + Math.sin(step * 0.8) * 0.35 + Math.random() * 0.3;
+          const p = phonemes[step % phonemes.length];
+          const dynamicIntensity = p.intensity > 0 ? p.intensity * (0.8 + Math.random() * 0.3) : 0;
           if (this.onLipSyncUpdate) {
-            this.onLipSyncUpdate(vowel, Math.max(0, Math.min(1, intensity)));
+            this.onLipSyncUpdate(p.vowel, Math.max(0, Math.min(1, dynamicIntensity)));
           }
           step++;
-        }, 90);
+        }, 80);
       };
 
       utterance.onend = () => {

@@ -34,6 +34,11 @@ export interface MotionPoseData {
   wink: number;         // 0 to 1
   serious: number;      // 0 to 1
 
+  // Pelvis / Hips & Finger dynamics (learned from VMD motion study)
+  hipsRoll?: number;    // -0.3 to 0.3 (hip sway left/right)
+  hipsYaw?: number;     // -0.3 to 0.3
+  fingerCurl?: number;  // 0 (open/relaxed) to 1.0 (curled neko paws / soft fist)
+
   // Dynamic rhythmic behavior during playback
   dynamicsType: 'static' | 'breathing' | 'hand_wave' | 'nodding' | 'swaying';
 }
@@ -57,7 +62,10 @@ export type IdleGesture =
   | 'shy_glance' 
   | 'thinking_pose' 
   | 'cute_nod' 
-  | 'stretch_relax';
+  | 'stretch_relax'
+  | 'pokedance_bounce'
+  | 'playful_neko'
+  | 'idol_cheer';
 
 export interface IdleGestureContext {
   timer: number;
@@ -68,6 +76,15 @@ export interface IdleGestureContext {
 }
 
 export interface IdleGestureResult {
+  // Center bounce & Hip sway (learned from VMD motion study)
+  centerOffsetY?: number;
+  centerOffsetX?: number;
+  hipsRoll?: number;
+  hipsYaw?: number;
+
+  // Finger curl (0 = relaxed open, 1.0 = curled neko paws)
+  fingerCurl?: number;
+
   // Head orientation offsets
   headRoll?: number;
   headPitch?: number;

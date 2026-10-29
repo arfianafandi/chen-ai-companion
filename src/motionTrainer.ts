@@ -21,7 +21,10 @@ export class MotionTrainerSystem {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        this.trainedMotions = JSON.parse(raw);
+        const loaded = JSON.parse(raw);
+        const loadedIds = new Set(loaded.map((m: any) => m.id));
+        const missingDefaults = DEFAULT_MOTION_PRESETS.filter(d => !loadedIds.has(d.id));
+        this.trainedMotions = [...loaded, ...missingDefaults];
       } else {
         this.trainedMotions = [...DEFAULT_MOTION_PRESETS];
         this.save();
@@ -65,6 +68,9 @@ export class MotionTrainerSystem {
       blush: 0.0,
       wink: 0.0,
       serious: 0.0,
+      hipsRoll: 0.0,
+      hipsYaw: 0.0,
+      fingerCurl: 0.0,
       dynamicsType: 'breathing',
     };
   }
