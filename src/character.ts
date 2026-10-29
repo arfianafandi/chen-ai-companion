@@ -43,8 +43,8 @@ export class ChenCharacter {
   public danceTime = 0;
   public danceTransitionState: 'none' | 'blend_in' | 'dancing' | 'blend_out' = 'none';
   private danceTransitionTimer = 0;
-  private readonly DANCE_BLEND_IN_DURATION = 0.6;
-  private readonly DANCE_BLEND_OUT_DURATION = 0.8;
+  private readonly DANCE_BLEND_IN_DURATION = 0.4;
+  private readonly DANCE_BLEND_OUT_DURATION = 0.5;
   private preDanceSnapshot = new Map<THREE.Bone, BoneSnapshot>();
   private exitDanceSnapshot = new Map<THREE.Bone, BoneSnapshot>();
   private boneRestTransforms = new Map<THREE.Bone, BoneSnapshot>();
@@ -454,40 +454,64 @@ export class ChenCharacter {
     this.customMotionWeight = 0;
   }
 
+  private syncProceduralQuaternions() {
+    if (this.headBone) this.headBone.quaternion.setFromEuler(this.headBone.rotation);
+    if (this.neckBone) this.neckBone.quaternion.setFromEuler(this.neckBone.rotation);
+    if (this.spineBone) this.spineBone.quaternion.setFromEuler(this.spineBone.rotation);
+    if (this.spine2Bone) this.spine2Bone.quaternion.setFromEuler(this.spine2Bone.rotation);
+    if (this.leftShoulderBone) this.leftShoulderBone.quaternion.setFromEuler(this.leftShoulderBone.rotation);
+    if (this.rightShoulderBone) this.rightShoulderBone.quaternion.setFromEuler(this.rightShoulderBone.rotation);
+    if (this.leftArmBone) this.leftArmBone.quaternion.setFromEuler(this.leftArmBone.rotation);
+    if (this.leftElbowBone) this.leftElbowBone.quaternion.setFromEuler(this.leftElbowBone.rotation);
+    if (this.rightArmBone) this.rightArmBone.quaternion.setFromEuler(this.rightArmBone.rotation);
+    if (this.rightElbowBone) this.rightElbowBone.quaternion.setFromEuler(this.rightElbowBone.rotation);
+    if (this.rightWristBone) this.rightWristBone.quaternion.setFromEuler(this.rightWristBone.rotation);
+    if (this.hipsBone) this.hipsBone.quaternion.setFromEuler(this.hipsBone.rotation);
+    if (this.centerBone) this.centerBone.quaternion.setFromEuler(this.centerBone.rotation);
+    for (const bone of this.fingerBones) {
+      bone.quaternion.setFromEuler(bone.rotation);
+    }
+  }
+
   async playDance(motionUrl: string, audioUrl: string, danceId: string): Promise<void> {
     if (!this.model || !this.loader || !this.mesh) return;
     if (structuredMotionPlayer.isPlaying) {
-      structuredMotionPlayer.stop(0.3);
+      structuredMotionPlayer.stop(0.2);
     }
 
     try {
-      // Capture live pose snapshot of all bones before dance begins
-      if (this.mesh.skeleton) {
-        for (const bone of this.mesh.skeleton.bones) {
-          let snap = this.preDanceSnapshot.get(bone);
-          if (!snap) {
-            snap = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
-            this.preDanceSnapshot.set(bone, snap);
-          }
-          snap.position.copy(bone.position);
-          snap.quaternion.copy(bone.quaternion);
-        }
-      }
-
-      this.isDancing = true;
-      this.currentDanceId = danceId;
-      this.danceTime = 0;
-      this.danceTransitionState = 'blend_in';
-      this.danceTransitionTimer = 0;
-
+      // 1. Preload animation FIRST while character stays fully in natural idle
       let anim = this.cachedAnimations.get(motionUrl);
       if (!anim) {
         anim = await this.loader.loadAnimation(motionUrl);
         this.cachedAnimations.set(motionUrl, anim);
       }
 
-      this.model.setAnimation(anim);
+      if (!this.mesh || !this.mesh.skeleton) return;
 
+      // 2. Synchronize current procedural idle Euler rotations into quaternions
+      this.syncProceduralQuaternions();
+
+      // 3. Capture exact snapshot of current live standing idle pose
+      for (const bone of this.mesh.skeleton.bones) {
+        let snap = this.preDanceSnapshot.get(bone);
+        if (!snap) {
+          snap = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
+          this.preDanceSnapshot.set(bone, snap);
+        }
+        snap.position.copy(bone.position);
+        snap.quaternion.copy(bone.quaternion);
+      }
+
+      // 4. Attach animation clip & initiate smooth 0.4s blend-in crossfade from frame 0
+      this.model.setAnimation(anim);
+      this.isDancing = true;
+      this.currentDanceId = danceId;
+      this.danceTime = 0;
+      this.danceTransitionState = 'blend_in';
+      this.danceTransitionTimer = 0;
+
+      // 5. Start audio in perfect sync with dance start
       await danceAudio.play(audioUrl, () => {
         this.stopDance();
       });
@@ -573,6 +597,8 @@ export class ChenCharacter {
           bone.position.copy(rest.position);
         }
       }
+      this.syncProceduralQuaternions();
+      this.mesh.skeleton.update();
       this.mesh.updateMatrixWorld(true);
     }
 
@@ -711,6 +737,9 @@ export class ChenCharacter {
         this.elapsedTime += clampedDelta;
         this.updateProceduralIdle(clampedDelta);
 
+        // Synchronize live procedural Euler rotations into quaternions for accurate slerp
+        this.syncProceduralQuaternions();
+
         // Slerp all bones from exit dance pose to procedural idle target / rest pose
         if (this.mesh.skeleton) {
           for (const bone of this.mesh.skeleton.bones) {
@@ -724,11 +753,11 @@ export class ChenCharacter {
             let targetQuat: THREE.Quaternion;
 
             if (bone === this.centerBone) {
-              targetPos = this.scratchTargetPos.copy(bone.position);
-              targetQuat = this.scratchTargetQuat.copy(bone.quaternion);
+              targetPos = bone.position;
+              targetQuat = bone.quaternion;
             } else if (isProc) {
               targetPos = rest ? rest.position : bone.position;
-              targetQuat = this.scratchTargetQuat.copy(bone.quaternion);
+              targetQuat = bone.quaternion;
             } else {
               targetPos = rest ? rest.position : bone.position;
               targetQuat = rest ? rest.quaternion : bone.quaternion;
@@ -737,6 +766,7 @@ export class ChenCharacter {
             bone.position.lerpVectors(snap.position, targetPos, alpha);
             bone.quaternion.slerpQuaternions(snap.quaternion, targetQuat, alpha);
           }
+          this.mesh.skeleton.update();
         }
 
         // Fade out leftover dance morph influences smoothly to 0
@@ -775,6 +805,7 @@ export class ChenCharacter {
               bone.position.lerpVectors(snap.position, bone.position, alpha);
               bone.quaternion.slerpQuaternions(snap.quaternion, bone.quaternion, alpha);
             }
+            this.mesh.skeleton.update();
           }
 
           if (progress >= 1.0) {
