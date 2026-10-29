@@ -160,7 +160,6 @@ export class StructuredMotionPlayer {
           this.isPlaying = false;
           this.activeMotion = null;
           this.isBlendingOut = false;
-          this.restoreRestPose();
           this.onCompleteCallback?.();
           return;
         }
@@ -182,8 +181,14 @@ export class StructuredMotionPlayer {
           this.boneHintIndices.clear();
           this.morphHintIndices.clear();
         } else {
-          // Reached end of non-looping motion: initiate smooth blend-out back to idle
-          this.stop(this.blendDuration);
+          // Reached end of non-looping motion: gracefully complete at the resting pose
+          this.currentTime = duration;
+          this.isPlaying = false;
+          this.activeMotion = null;
+          this.isBlendingOut = false;
+          this.weight = 0.0;
+          this.onCompleteCallback?.();
+          return;
         }
       }
     }
@@ -206,10 +211,10 @@ export class StructuredMotionPlayer {
       const bone = cache.bone;
 
       if (this.isBlendingOut) {
-        // Smoothly blend from exit pose back to rest pose
+        // Smoothly blend from exit pose back to initial pose (natural idle stance)
         const alpha = smootherstep(1.0 - this.weight); // 0 -> 1 as weight drops to 0
-        bone.quaternion.copy(cache.exitQuaternion).slerp(cache.restQuaternion, alpha);
-        bone.position.lerpVectors(cache.exitPosition, cache.restPosition, alpha);
+        bone.quaternion.copy(cache.exitQuaternion).slerp(cache.startQuaternion, alpha);
+        bone.position.lerpVectors(cache.exitPosition, cache.startPosition, alpha);
       } else {
         // Sample keyframe position & rotation
         this.sampleBoneTrack(boneName, keyframes, t);

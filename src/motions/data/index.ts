@@ -1,3 +1,4 @@
+let cachedGentleWave: IVmdStructuredMotion | null = null;
 import type { IVmdStructuredMotion } from '../types';
 
 export interface StructuredMotionEntry {
@@ -40,6 +41,12 @@ export const STRUCTURED_MOTIONS: StructuredMotionEntry[] = [
     description: 'Lambaian tangan ramah dengan telapak tangan menghadap ke depan, 15 jari terbuka anggun, dan senyuman manis.',
     durationSeconds: 3.2,
     totalFrames: 96,
-    load: async () => (await import('./gentleWave')).default,
+    load: async () => {
+      if (!cachedGentleWave) {
+        const mod = await import('./gentleWave');
+        cachedGentleWave = mod.gentleWaveMotion || mod.default;
+      }
+      return cachedGentleWave;
+    },
   },
 ];

@@ -404,7 +404,7 @@ export class ChenCharacter {
       this.playStructuredMotion('gentleWave', {
         loop: false,
         allowLookAt: true,
-        blendDuration: 0.35,
+        blendDuration: 0.15,
         onComplete: () => {
           this.currentGesture = 'none';
           this.gestureWeight = 0;
@@ -1012,18 +1012,18 @@ export class ChenCharacter {
     // Only apply procedural right arm and finger rotations if structured motion player is NOT driving them
     if (!structuredMotionPlayer.isPlaying) {
       if (this.rightArmBone) {
-        this.rightArmBone.rotation.z = THREE.MathUtils.lerp(this.rightArmBone.rotation.z, rightArmTargetZ, delta * 3.5);
-        this.rightArmBone.rotation.x = THREE.MathUtils.lerp(this.rightArmBone.rotation.x, rightArmTargetX, delta * 3.5);
-        this.rightArmBone.rotation.y = THREE.MathUtils.lerp(this.rightArmBone.rotation.y, rightArmTargetY, delta * 3.5);
+        this.rightArmBone.rotation.z = THREE.MathUtils.lerp(this.rightArmBone.rotation.z, rightArmTargetZ, delta * 6.0);
+        this.rightArmBone.rotation.x = THREE.MathUtils.lerp(this.rightArmBone.rotation.x, rightArmTargetX, delta * 6.0);
+        this.rightArmBone.rotation.y = THREE.MathUtils.lerp(this.rightArmBone.rotation.y, rightArmTargetY, delta * 6.0);
       }
       if (this.rightElbowBone) {
-        this.rightElbowBone.rotation.z = THREE.MathUtils.lerp(this.rightElbowBone.rotation.z, rightElbowTargetZ, delta * 3.5);
-        this.rightElbowBone.rotation.x = THREE.MathUtils.lerp(this.rightElbowBone.rotation.x, rightElbowTargetX, delta * 3.5);
-        this.rightElbowBone.rotation.y = THREE.MathUtils.lerp(this.rightElbowBone.rotation.y, rightElbowTargetY, delta * 3.5);
+        this.rightElbowBone.rotation.z = THREE.MathUtils.lerp(this.rightElbowBone.rotation.z, rightElbowTargetZ, delta * 6.0);
+        this.rightElbowBone.rotation.x = THREE.MathUtils.lerp(this.rightElbowBone.rotation.x, rightElbowTargetX, delta * 6.0);
+        this.rightElbowBone.rotation.y = THREE.MathUtils.lerp(this.rightElbowBone.rotation.y, rightElbowTargetY, delta * 6.0);
       }
       if (this.rightWristBone) {
-        this.rightWristBone.rotation.z = THREE.MathUtils.lerp(this.rightWristBone.rotation.z, rightWristTargetZ, delta * 3.5);
-        this.rightWristBone.rotation.x = THREE.MathUtils.lerp(this.rightWristBone.rotation.x, rightWristTargetX, delta * 3.5);
+        this.rightWristBone.rotation.z = THREE.MathUtils.lerp(this.rightWristBone.rotation.z, rightWristTargetZ, delta * 6.0);
+        this.rightWristBone.rotation.x = THREE.MathUtils.lerp(this.rightWristBone.rotation.x, rightWristTargetX, delta * 6.0);
       }
 
       // 3b. Natural Finger Articulation
