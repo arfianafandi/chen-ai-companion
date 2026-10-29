@@ -397,10 +397,9 @@ export class ChenCharacter {
     createHitSphere('cheek', 1.05, new THREE.Vector3(0.68, 18.4, 0.72));
     createHitSphere('cheek', 1.05, new THREE.Vector3(-0.68, 18.4, 0.72));
     createHitSphere('cheek', 1.25, new THREE.Vector3(0, 18.3, 0.7));
-    // Dual Left & Right Breast Hitboxes for tactile squish & bounce
-    createHitSphere('chest', 1.35, new THREE.Vector3(0.65, 15.6, 0.85));
-    createHitSphere('chest', 1.35, new THREE.Vector3(-0.65, 15.6, 0.85));
-    createHitSphere('chest', 1.5, new THREE.Vector3(0, 15.3, 0.5));
+    // Dual Left & Right Breast Hitboxes (Strictly localized to breasts only)
+    createHitSphere('chest', 1.05, new THREE.Vector3(0.68, 15.65, 0.95));
+    createHitSphere('chest', 1.05, new THREE.Vector3(-0.68, 15.65, 0.95));
     // Hands & Dual Blades (y: 11.5)
     createHitSphere('hand', 1.5, new THREE.Vector3(3.5, 12.0, 0.3));
     createHitSphere('hand', 1.5, new THREE.Vector3(-3.5, 12.0, 0.3));
@@ -812,32 +811,27 @@ export class ChenCharacter {
   public triggerTouchSpring(part: BodyPart, hitPointWorld?: THREE.Vector3, force = 1.0) {
     if (part === 'chest') {
       const x = hitPointWorld ? hitPointWorld.x : 0;
-      // In Three.js MMD coordinates, model faces +Z: x > 0.12 is left breast, x < -0.12 is right breast
-      if (x > 0.12) {
-        // Direct squish compression on left breast
+      // In Three.js MMD coordinates, model faces +Z: x > 0.05 is left breast, x < -0.05 is right breast
+      if (x > 0.05) {
+        // Squish compression strictly on left breast only (surrounding stays 100% still)
         this.leftChestSpring.displacement = -0.16 * force;
         this.leftChestSpring.velocity = -2.3 * force;
-        this.leftChestSpring.lateralVelX = 1.3 * force;
+        this.leftChestSpring.lateralVelX = 1.2 * force;
         this.leftChestSpring.lateralVelY = 0.8 * force;
-        // Sympathetic fluid/elastic wave on right breast
-        this.rightChestSpring.velocity = 0.9 * force;
-      } else if (x < -0.12) {
-        // Direct squish compression on right breast
+      } else if (x < -0.05) {
+        // Squish compression strictly on right breast only (surrounding stays 100% still)
         this.rightChestSpring.displacement = -0.16 * force;
         this.rightChestSpring.velocity = -2.3 * force;
-        this.rightChestSpring.lateralVelX = -1.3 * force;
+        this.rightChestSpring.lateralVelX = -1.2 * force;
         this.rightChestSpring.lateralVelY = 0.8 * force;
-        // Sympathetic fluid/elastic wave on left breast
-        this.leftChestSpring.velocity = 0.9 * force;
       } else {
-        // Center poke: both compress and bounce
-        this.leftChestSpring.displacement = -0.14 * force;
-        this.leftChestSpring.velocity = -2.0 * force;
-        this.rightChestSpring.displacement = -0.14 * force;
-        this.rightChestSpring.velocity = -2.0 * force;
+        // Center cleavage poke: both breasts bounce softly without moving torso
+        this.leftChestSpring.displacement = -0.12 * force;
+        this.leftChestSpring.velocity = -1.8 * force;
+        this.rightChestSpring.displacement = -0.12 * force;
+        this.rightChestSpring.velocity = -1.8 * force;
       }
-      // Upper chest torso recoil
-      this.torsoRecoilSpring.velocity = -1.2 * force;
+      // Zero torso recoil: surrounding body, spine, shoulders, and jacket stay completely still!
     } else if (part === 'cheek') {
       const x = hitPointWorld ? hitPointWorld.x : 0;
       if (x >= 0) {
@@ -966,16 +960,7 @@ export class ChenCharacter {
       const rightBulgeX = this.rightChestSpring.lateralX;
       const rightBulgeY = this.rightChestSpring.lateralY;
 
-      // Bust adjustment base bone
-      if (this.bustAdjustBone) {
-        const rest = this.boneRestTransforms.get(this.bustAdjustBone);
-        if (rest) {
-          const avgDisp = (leftDispZ + rightDispZ) * 0.5;
-          this.bustAdjustBone.position.x = rest.position.x;
-          this.bustAdjustBone.position.y = rest.position.y;
-          this.bustAdjustBone.position.z = rest.position.z + avgDisp * 0.35;
-        }
-      }
+      // Do not move bustAdjustBone base so surrounding sternum/jacket stays 100% still
 
       // Left breast bones
       for (const bone of this.leftChestBones) {
@@ -1062,10 +1047,7 @@ export class ChenCharacter {
       this.cheekBonesActive = false;
     }
 
-    // 3. Torso subtle recoil
-    if (this.spine2Bone && hasTorsoMotion) {
-      this.spine2Bone.rotation.x += this.torsoRecoilSpring.displacement * 0.06;
-    }
+    // Torso recoil completely removed so surrounding upper body stays 100% still
 
     // 4. Head / cheek squish tilt & bob
     if (this.headBone && hasHeadMotion) {

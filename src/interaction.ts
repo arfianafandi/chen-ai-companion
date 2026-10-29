@@ -197,12 +197,15 @@ export class InteractionManager {
     if (this.chen.root) {
       const charIntersects = this.raycaster.intersectObject(this.chen.root, true);
       if (charIntersects.length > 0) {
-        // Estimate part by hit point Y coordinate calibrated to Chen's height
+        // Estimate part by hit point coordinates calibrated strictly to Chen's dimensions
         const hitPoint = charIntersects[0].point;
-        let detectedPart: BodyPart = 'chest';
+        let detectedPart: BodyPart = 'leg';
         if (hitPoint.y > 19.2) detectedPart = 'head';
         else if (hitPoint.y > 17.5) detectedPart = 'cheek';
-        else if (hitPoint.y > 14.0) detectedPart = 'chest';
+        // Only classify as chest if ray hits the front breast protrusion (not shoulders, ribs, collar, or belly)
+        else if (hitPoint.y >= 14.8 && hitPoint.y <= 16.9 && Math.abs(hitPoint.x) <= 1.35 && hitPoint.z >= 0.55) {
+          detectedPart = 'chest';
+        }
         else if (hitPoint.y > 9.0 && Math.abs(hitPoint.x) > 1.8) detectedPart = 'hand';
         else detectedPart = 'leg';
 
