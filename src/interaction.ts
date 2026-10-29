@@ -37,29 +37,29 @@ export const TOUCH_REACTIONS: Record<BodyPart, TouchReaction[]> = {
   cheek: [
     {
       part: 'cheek',
-      name: 'Cheek Poke',
-      expression: 'tehepero',
-      dialogue: 'Wha—! Why did you poke my cheek? Are you testing my reflexes? [EMOTE:tehepero]',
-      affectionGain: 4,
-      soundType: 'cute',
-      voiceKey: 'cheek_1',
-    },
-    {
-      part: 'cheek',
-      name: 'Cheek Poke',
-      expression: 'surprised',
-      dialogue: 'Ah! You caught me off-guard... My face is getting hot now. [EMOTE:surprised]',
-      affectionGain: 4,
-      soundType: 'cute',
-      voiceKey: 'cheek_1',
-    },
-    {
-      part: 'cheek',
-      name: 'Pinch',
+      name: 'Colek Pipi Kenyal',
       expression: 'pout',
-      dialogue: 'Muu... does my face look like mochi to you? [EMOTE:pout]',
-      affectionGain: 5,
-      soundType: 'cute',
+      dialogue: 'Muu... pipiku dicolek-colek kenyal! Memangnya pipiku mirip kue mochi, Administrator? [EMOTE:pout]',
+      affectionGain: 4,
+      soundType: 'squish',
+      voiceKey: 'cheek_1',
+    },
+    {
+      part: 'cheek',
+      name: 'Pipi Kenyal',
+      expression: 'blush',
+      dialogue: 'A-ah! Kenapa mencolek pipiku tiba-tiba... rasanya kenyal dan geli! Wajahku jadi hangat sekarang... [EMOTE:blush]',
+      affectionGain: 4,
+      soundType: 'squish',
+      voiceKey: 'cheek_1',
+    },
+    {
+      part: 'cheek',
+      name: 'Colek Reflex',
+      expression: 'tehepero',
+      dialogue: 'Wha—! Refleks mencolek pipi yang cepat! Pipiku kenyal kan? Hehe, tapi jangan sering-sering! [EMOTE:tehepero]',
+      affectionGain: 4,
+      soundType: 'squish',
       voiceKey: 'cheek_1',
     },
   ],
@@ -132,9 +132,6 @@ export class InteractionManager {
   private camera: THREE.Camera;
   private container: HTMLElement;
   public onTouchDialogue?: (text: string, emotion: EmotionType) => void;
-  private isDraggingTouch = false;
-  private dragStartX = 0;
-  private dragStartY = 0;
 
   constructor(chen: ChenCharacter, camera: THREE.Camera, container: HTMLElement) {
     this.chen = chen;
@@ -147,17 +144,10 @@ export class InteractionManager {
   private setupListeners() {
     this.container.addEventListener('pointerdown', this.onPointerDown.bind(this));
     this.container.addEventListener('pointermove', this.onPointerMove.bind(this));
-    window.addEventListener('pointerup', this.onPointerUp.bind(this));
   }
 
   // Update Look-at Target for Head tracking
   private onPointerMove(e: PointerEvent) {
-    if (this.isDraggingTouch) {
-      const deltaX = e.clientX - this.dragStartX;
-      const deltaY = e.clientY - this.dragStartY;
-      this.chen.updateTouchDrag(deltaX, deltaY);
-    }
-
     if (this.chen.isDancing) return;
 
     const rect = this.container.getBoundingClientRect();
@@ -174,14 +164,6 @@ export class InteractionManager {
     // Constrain height around Chen's head (y: 16 - 22)
     targetPos.y = Math.max(15, Math.min(23, targetPos.y));
     this.chen.targetLookAt.copy(targetPos);
-  }
-
-  private onPointerUp() {
-    if (this.isDraggingTouch) {
-      this.chen.releaseTouchDrag();
-      sfx.playSquishSound();
-      this.isDraggingTouch = false;
-    }
   }
 
   private onPointerDown(e: PointerEvent) {
@@ -207,14 +189,6 @@ export class InteractionManager {
       const hitObj = intersects[0].object;
       const part = hitObj.userData.bodyPart as BodyPart;
       const hitPoint = intersects[0].point;
-
-      if (part === 'chest') {
-        this.isDraggingTouch = true;
-        this.dragStartX = e.clientX;
-        this.dragStartY = e.clientY;
-        this.chen.startTouchDrag('chest', hitPoint);
-      }
-
       this.triggerTouchReaction(part, e.clientX, e.clientY, hitPoint);
       return;
     }
@@ -231,13 +205,6 @@ export class InteractionManager {
         else if (hitPoint.y > 14.0) detectedPart = 'chest';
         else if (hitPoint.y > 9.0 && Math.abs(hitPoint.x) > 1.8) detectedPart = 'hand';
         else detectedPart = 'leg';
-
-        if (detectedPart === 'chest') {
-          this.isDraggingTouch = true;
-          this.dragStartX = e.clientX;
-          this.dragStartY = e.clientY;
-          this.chen.startTouchDrag('chest', hitPoint);
-        }
 
         this.triggerTouchReaction(detectedPart, e.clientX, e.clientY, hitPoint);
       }

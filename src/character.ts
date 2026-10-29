@@ -83,10 +83,13 @@ export class ChenCharacter {
   private rightWristBone: THREE.Bone | null = null;
   private fingerBones: THREE.Bone[] = [];
 
-  // Tactile Soft-Body Spring Physics for Squishy Poking
+  // Tactile Soft-Body Spring Physics for Squishy Poking (Chest & Cheeks)
   private bustAdjustBone: THREE.Bone | null = null;
   private leftChestBones: THREE.Bone[] = [];
   private rightChestBones: THREE.Bone[] = [];
+  private leftCheekBones: THREE.Bone[] = [];
+  private rightCheekBones: THREE.Bone[] = [];
+
   private leftChestSpring = {
     displacement: 0,
     velocity: 0,
@@ -107,6 +110,28 @@ export class ChenCharacter {
     lateralVelY: 0,
     stiffness: 200,
     damping: 13.0,
+    mass: 1.0,
+  };
+  private leftCheekSpring = {
+    displacement: 0,
+    velocity: 0,
+    lateralX: 0,
+    lateralVelX: 0,
+    lateralY: 0,
+    lateralVelY: 0,
+    stiffness: 230,
+    damping: 14.5,
+    mass: 1.0,
+  };
+  private rightCheekSpring = {
+    displacement: 0,
+    velocity: 0,
+    lateralX: 0,
+    lateralVelX: 0,
+    lateralY: 0,
+    lateralVelY: 0,
+    stiffness: 230,
+    damping: 14.5,
     mass: 1.0,
   };
   private torsoRecoilSpring = {
@@ -131,11 +156,6 @@ export class ChenCharacter {
     damping: 14.0,
     mass: 1.0,
   };
-
-  // Interactive Drag & Pinch state
-  private isTouchingDrag = false;
-  private touchDragPart: BodyPart | null = null;
-  private touchDragSide: 'left' | 'right' | 'both' = 'both';
 
   // Head tracking (Target at Chen's eye level y=18.88)
   public targetLookAt = new THREE.Vector3(0, 18.8, 16.0);
@@ -330,6 +350,8 @@ export class ChenCharacter {
         else if (name === 'おっぱい調整') this.bustAdjustBone = bone;
         else if (name.startsWith('左胸')) this.leftChestBones.push(bone);
         else if (name.startsWith('右胸')) this.rightChestBones.push(bone);
+        else if (name.startsWith('faceLfCheek') || name.includes('左頬')) this.leftCheekBones.push(bone);
+        else if (name.startsWith('faceRtCheek') || name.includes('右頬')) this.rightCheekBones.push(bone);
       }
     }
 
@@ -369,9 +391,11 @@ export class ChenCharacter {
 
     // Head Top & Hair (y: 19.8 - 21.5)
     createHitSphere('head', 1.5, new THREE.Vector3(0, 20.0, 0.2));
-    // Face & Cheeks (y: 18.0 - 19.2)
-    createHitSphere('cheek', 1.3, new THREE.Vector3(0, 18.5, 0.7));
-    // Dual Left & Right Breast Hitboxes for accurate tactile squish & bounce
+    // Dual Left & Right Cheek Hitboxes for squishy cheek poking
+    createHitSphere('cheek', 1.05, new THREE.Vector3(0.68, 18.4, 0.72));
+    createHitSphere('cheek', 1.05, new THREE.Vector3(-0.68, 18.4, 0.72));
+    createHitSphere('cheek', 1.25, new THREE.Vector3(0, 18.3, 0.7));
+    // Dual Left & Right Breast Hitboxes for tactile squish & bounce
     createHitSphere('chest', 1.35, new THREE.Vector3(0.65, 15.6, 0.85));
     createHitSphere('chest', 1.35, new THREE.Vector3(-0.65, 15.6, 0.85));
     createHitSphere('chest', 1.5, new THREE.Vector3(0, 15.3, 0.5));
@@ -781,7 +805,7 @@ export class ChenCharacter {
   }
 
   /**
-   * Trigger an instant squishy poke / tap impulse on a body part
+   * Trigger an instant squishy poke impulse on a body part (Chest & Cheeks)
    */
   public triggerTouchSpring(part: BodyPart, hitPointWorld?: THREE.Vector3, force = 1.0) {
     if (part === 'chest') {
@@ -814,72 +838,34 @@ export class ChenCharacter {
       this.torsoRecoilSpring.velocity = -1.2 * force;
     } else if (part === 'cheek') {
       const x = hitPointWorld ? hitPointWorld.x : 0;
-      this.headSquishSpring.displacement = -0.06 * force;
-      this.headSquishSpring.velocity = (x > 0 ? 0.7 : -0.7) * force;
+      if (x >= 0) {
+        // Left cheek squish
+        this.leftCheekSpring.displacement = -0.12 * force;
+        this.leftCheekSpring.velocity = -2.0 * force;
+        this.leftCheekSpring.lateralVelX = 1.1 * force;
+        this.leftCheekSpring.lateralVelY = 0.6 * force;
+        // Sweet head tilt away from poke
+        this.headSquishSpring.velocity = 0.7 * force;
+      } else {
+        // Right cheek squish
+        this.rightCheekSpring.displacement = -0.12 * force;
+        this.rightCheekSpring.velocity = -2.0 * force;
+        this.rightCheekSpring.lateralVelX = -1.1 * force;
+        this.rightCheekSpring.lateralVelY = 0.6 * force;
+        // Sweet head tilt away from poke
+        this.headSquishSpring.velocity = -0.7 * force;
+      }
     } else if (part === 'head') {
       this.headSquishSpring.displacement = -0.08 * force;
       this.headSquishSpring.velocity = -1.1 * force;
     }
   }
 
-  /**
-   * Start dragging / pressing into the soft body
-   */
-  public startTouchDrag(part: BodyPart, hitPointWorld?: THREE.Vector3) {
-    this.isTouchingDrag = true;
-    this.touchDragPart = part;
-    if (part === 'chest') {
-      const x = hitPointWorld ? hitPointWorld.x : 0;
-      if (x > 0.12) this.touchDragSide = 'left';
-      else if (x < -0.12) this.touchDragSide = 'right';
-      else this.touchDragSide = 'both';
-    }
-  }
-
-  /**
-   * Update active drag deformation
-   */
-  public updateTouchDrag(screenDeltaX: number, screenDeltaY: number) {
-    if (!this.isTouchingDrag || this.touchDragPart !== 'chest') return;
-    const inward = Math.max(-0.25, Math.min(0.2, screenDeltaY * -0.0025));
-    const lateral = Math.max(-0.15, Math.min(0.15, screenDeltaX * 0.002));
-
-    if (this.touchDragSide === 'left' || this.touchDragSide === 'both') {
-      this.leftChestSpring.displacement = inward;
-      this.leftChestSpring.lateralX = lateral;
-      this.leftChestSpring.velocity = 0;
-    }
-    if (this.touchDragSide === 'right' || this.touchDragSide === 'both') {
-      this.rightChestSpring.displacement = inward;
-      this.rightChestSpring.lateralX = -lateral;
-      this.rightChestSpring.velocity = 0;
-    }
-  }
-
-  /**
-   * Release active drag and let soft body snap back and jiggle
-   */
-  public releaseTouchDrag() {
-    if (!this.isTouchingDrag) return;
-    if (this.touchDragPart === 'chest') {
-      if (this.touchDragSide === 'left' || this.touchDragSide === 'both') {
-        this.leftChestSpring.velocity = -this.leftChestSpring.displacement * 16.0;
-      }
-      if (this.touchDragSide === 'right' || this.touchDragSide === 'both') {
-        this.rightChestSpring.velocity = -this.rightChestSpring.displacement * 16.0;
-      }
-      this.torsoRecoilSpring.velocity = 0.8;
-    }
-    this.isTouchingDrag = false;
-    this.touchDragPart = null;
-  }
-
   private updateTouchSpringPhysics(dt: number) {
     if (!this.mesh || !this.mesh.skeleton) return;
 
     // Helper to step a spring with semi-implicit Euler
-    const step = (s: any, isHeld: boolean) => {
-      if (isHeld) return;
+    const step = (s: any) => {
       const forceZ = -s.stiffness * s.displacement - s.damping * s.velocity;
       s.velocity += (forceZ / s.mass) * dt;
       s.displacement += s.velocity * dt;
@@ -904,26 +890,30 @@ export class ChenCharacter {
       }
     };
 
-    const isLeftHeld = this.isTouchingDrag && (this.touchDragSide === 'left' || this.touchDragSide === 'both');
-    const isRightHeld = this.isTouchingDrag && (this.touchDragSide === 'right' || this.touchDragSide === 'both');
-
-    step(this.leftChestSpring, isLeftHeld);
-    step(this.rightChestSpring, isRightHeld);
-    step(this.torsoRecoilSpring, false);
-    step(this.headSquishSpring, false);
+    step(this.leftChestSpring);
+    step(this.rightChestSpring);
+    step(this.leftCheekSpring);
+    step(this.rightCheekSpring);
+    step(this.torsoRecoilSpring);
+    step(this.headSquishSpring);
 
     const hasChestMotion = Math.abs(this.leftChestSpring.displacement) > 0.0001 ||
                            Math.abs(this.rightChestSpring.displacement) > 0.0001 ||
                            Math.abs(this.leftChestSpring.velocity) > 0.001 ||
                            Math.abs(this.rightChestSpring.velocity) > 0.001;
 
+    const hasCheekMotion = Math.abs(this.leftCheekSpring.displacement) > 0.0001 ||
+                           Math.abs(this.rightCheekSpring.displacement) > 0.0001 ||
+                           Math.abs(this.leftCheekSpring.velocity) > 0.001 ||
+                           Math.abs(this.rightCheekSpring.velocity) > 0.001;
+
     const hasTorsoMotion = Math.abs(this.torsoRecoilSpring.displacement) > 0.0001;
     const hasHeadMotion = Math.abs(this.headSquishSpring.displacement) > 0.0001 || Math.abs(this.headSquishSpring.velocity) > 0.001;
 
-    if (!hasChestMotion && !hasTorsoMotion && !hasHeadMotion) return;
+    if (!hasChestMotion && !hasCheekMotion && !hasTorsoMotion && !hasHeadMotion) return;
 
     // Apply left breast squish & bounce
-    if (this.leftChestBones.length > 0) {
+    if (this.leftChestBones.length > 0 && hasChestMotion) {
       const dispZ = this.leftChestSpring.displacement;
       const bulgeX = this.leftChestSpring.lateralX;
       const bulgeY = this.leftChestSpring.lateralY;
@@ -937,7 +927,7 @@ export class ChenCharacter {
     }
 
     // Apply right breast squish & bounce
-    if (this.rightChestBones.length > 0) {
+    if (this.rightChestBones.length > 0 && hasChestMotion) {
       const dispZ = this.rightChestSpring.displacement;
       const bulgeX = this.rightChestSpring.lateralX;
       const bulgeY = this.rightChestSpring.lateralY;
@@ -951,9 +941,33 @@ export class ChenCharacter {
     }
 
     // Bust adjust bone (parent) subtle center dip
-    if (this.bustAdjustBone) {
+    if (this.bustAdjustBone && hasChestMotion) {
       const avgDisp = (this.leftChestSpring.displacement + this.rightChestSpring.displacement) * 0.5;
       this.bustAdjustBone.position.z += avgDisp * 0.35;
+    }
+
+    // Apply left cheek squish & bounce
+    if (this.leftCheekBones.length > 0 && hasCheekMotion) {
+      const dispZ = this.leftCheekSpring.displacement;
+      const bulgeX = this.leftCheekSpring.lateralX;
+      const bulgeY = this.leftCheekSpring.lateralY;
+      for (const bone of this.leftCheekBones) {
+        bone.position.z += dispZ;
+        bone.position.x += bulgeX * 0.5;
+        bone.position.y += bulgeY * 0.3;
+      }
+    }
+
+    // Apply right cheek squish & bounce
+    if (this.rightCheekBones.length > 0 && hasCheekMotion) {
+      const dispZ = this.rightCheekSpring.displacement;
+      const bulgeX = this.rightCheekSpring.lateralX;
+      const bulgeY = this.rightCheekSpring.lateralY;
+      for (const bone of this.rightCheekBones) {
+        bone.position.z += dispZ;
+        bone.position.x += bulgeX * 0.5;
+        bone.position.y += bulgeY * 0.3;
+      }
     }
 
     // Torso subtle recoil
@@ -963,8 +977,8 @@ export class ChenCharacter {
 
     // Head / cheek squish tilt & bob
     if (this.headBone && hasHeadMotion) {
-      this.headBone.position.y += this.headSquishSpring.displacement * 0.5;
-      this.headBone.rotation.z += this.headSquishSpring.velocity * 0.04;
+      this.headBone.position.y += this.headSquishSpring.displacement * 0.3;
+      this.headBone.rotation.z += this.headSquishSpring.velocity * 0.035;
     }
 
     this.mesh.skeleton.update();
