@@ -50,6 +50,10 @@ export class ChenCharacter {
   private boneRestTransforms = new Map<THREE.Bone, BoneSnapshot>();
   private cachedAnimations = new Map<string, ThreeMmdAnimation>();
   private savedExternalPhysicsData: any = null;
+  private scratchTargetPos = new THREE.Vector3();
+  private scratchTargetQuat = new THREE.Quaternion();
+  private exitMorphSnapshot: Float32Array | null = null;
+  public onDanceEnd?: () => void;
 
   // Performance & Quality State
   public outlineEnabled = false; // Default false for smooth 60 FPS (toggleable)
@@ -493,6 +497,27 @@ export class ChenCharacter {
     }
   }
 
+  private isProceduralBone(bone: THREE.Bone): boolean {
+    if (
+      bone === this.headBone ||
+      bone === this.neckBone ||
+      bone === this.spineBone ||
+      bone === this.spine2Bone ||
+      bone === this.leftShoulderBone ||
+      bone === this.rightShoulderBone ||
+      bone === this.centerBone ||
+      bone === this.hipsBone ||
+      bone === this.leftArmBone ||
+      bone === this.leftElbowBone ||
+      bone === this.rightArmBone ||
+      bone === this.rightElbowBone ||
+      bone === this.rightWristBone
+    ) {
+      return true;
+    }
+    return this.fingerBones.includes(bone);
+  }
+
   public stopDance(immediate = false) {
     if (!this.isDancing) return;
 
@@ -514,6 +539,11 @@ export class ChenCharacter {
       }
     }
 
+    // Capture snapshot of morph influences so dance facial expressions fade smoothly to neutral
+    if (this.mesh && this.mesh.morphTargetInfluences) {
+      this.exitMorphSnapshot = new Float32Array(this.mesh.morphTargetInfluences);
+    }
+
     this.danceTransitionState = 'blend_out';
     this.danceTransitionTimer = 0;
     this.currentDanceId = null;
@@ -528,6 +558,33 @@ export class ChenCharacter {
     this.danceTime = 0;
     this.lastPhysicsTime = 0;
     danceAudio.stop();
+
+    // 1. Force all non-procedural bones (legs, knees, feet, ankles, IK, root, groove)
+    // and non-center bone positions back to exact rest transforms
+    if (this.mesh && this.mesh.skeleton) {
+      for (const bone of this.mesh.skeleton.bones) {
+        const rest = this.boneRestTransforms.get(bone);
+        if (!rest) continue;
+
+        if (!this.isProceduralBone(bone)) {
+          bone.position.copy(rest.position);
+          bone.quaternion.copy(rest.quaternion);
+        } else if (bone !== this.centerBone) {
+          bone.position.copy(rest.position);
+        }
+      }
+      this.mesh.updateMatrixWorld(true);
+    }
+
+    // 2. Clear all MMD facial morphs and morph states
+    if (this.mesh && this.mesh.morphTargetInfluences) {
+      this.mesh.morphTargetInfluences.fill(0);
+    }
+    this.exitMorphSnapshot = null;
+    this.currentMorphWeights = {};
+    this.targetMorphWeights = {};
+
+    // 3. Detach MMD animation clip & reset Bullet physics runtime
     if (this.model) {
       const runtime = this.model.runtime as any;
       if (runtime) {
@@ -545,6 +602,7 @@ export class ChenCharacter {
       }
     }
     this.setEmotion('normal');
+    this.onDanceEnd?.();
   }
 
   /**
@@ -653,17 +711,41 @@ export class ChenCharacter {
         this.elapsedTime += clampedDelta;
         this.updateProceduralIdle(clampedDelta);
 
-        // Slerp all bones from exit dance pose to procedural idle target
+        // Slerp all bones from exit dance pose to procedural idle target / rest pose
         if (this.mesh.skeleton) {
           for (const bone of this.mesh.skeleton.bones) {
             const snap = this.exitDanceSnapshot.get(bone);
             if (!snap) continue;
 
-            const targetPos = bone.position;
-            const targetQuat = bone.quaternion;
+            const rest = this.boneRestTransforms.get(bone);
+            const isProc = this.isProceduralBone(bone);
+
+            let targetPos: THREE.Vector3;
+            let targetQuat: THREE.Quaternion;
+
+            if (bone === this.centerBone) {
+              targetPos = this.scratchTargetPos.copy(bone.position);
+              targetQuat = this.scratchTargetQuat.copy(bone.quaternion);
+            } else if (isProc) {
+              targetPos = rest ? rest.position : bone.position;
+              targetQuat = this.scratchTargetQuat.copy(bone.quaternion);
+            } else {
+              targetPos = rest ? rest.position : bone.position;
+              targetQuat = rest ? rest.quaternion : bone.quaternion;
+            }
 
             bone.position.lerpVectors(snap.position, targetPos, alpha);
             bone.quaternion.slerpQuaternions(snap.quaternion, targetQuat, alpha);
+          }
+        }
+
+        // Fade out leftover dance morph influences smoothly to 0
+        if (this.exitMorphSnapshot && this.mesh.morphTargetInfluences) {
+          const morphs = this.mesh.morphTargetInfluences;
+          const snapMorphs = this.exitMorphSnapshot;
+          const count = Math.min(morphs.length, snapMorphs.length);
+          for (let i = 0; i < count; i++) {
+            morphs[i] = THREE.MathUtils.lerp(snapMorphs[i], 0, alpha);
           }
         }
 

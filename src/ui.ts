@@ -860,6 +860,10 @@ export class UIManager {
       this.showSpeechBubble('Dance complete! Did you enjoy it, Administrator? [EMOTE:smile]', 'smile');
     });
 
+    this.chen.onDanceEnd = () => {
+      stopDanceBtn.style.display = 'none';
+    };
+
     // 9. Expression Buttons
     const exprBtns = this.container.querySelectorAll('.expr-btn');
     exprBtns.forEach(b => {
