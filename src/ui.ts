@@ -4,44 +4,12 @@ import { SceneManager, type CameraPreset } from './scene';
 import { ai, stt } from './ai';
 import { tts, sfx, chenVoice, danceAudio } from './audio';
 import { quality, type GraphicsConfig, type GraphicsPreset } from './quality';
-import type { EmotionType, DanceTrack } from './types';
+import type { EmotionType } from './types';
 import { neuralMemory, type LearnedMemory } from './neuralMemory';
 import { motionTrainer, type TrainedMotion, type MotionPoseData, DEFAULT_MOTION_PRESETS } from './motionTrainer';
 
-export const DANCE_TRACKS: DanceTrack[] = [
-  {
-    id: 'pokedance',
-    name: 'Poke Dance (ポケアニ)',
-    motionUrl: `${import.meta.env.BASE_URL}motions/pokedance.vmd`,
-    audioUrl: `${import.meta.env.BASE_URL}audio/pokedance.wav`,
-    durationEstimate: 35,
-    description: 'Charming rhythmic hip sway & hand gestures.',
-  },
-  {
-    id: 'yurushite_neko',
-    name: 'Yurushite Neko (ゆるして猫!!)',
-    motionUrl: `${import.meta.env.BASE_URL}motions/yurushite_neko.vmd`,
-    audioUrl: `${import.meta.env.BASE_URL}audio/yurushite_neko.wav`,
-    durationEstimate: 40,
-    description: 'Cute apologetic cat dance with adorable ear poses.',
-  },
-  {
-    id: 'michino_timothy',
-    name: 'Michino Timothy (ミチノチモシー)',
-    motionUrl: `${import.meta.env.BASE_URL}motions/michino_timothy.vmd`,
-    audioUrl: `${import.meta.env.BASE_URL}audio/michino_timothy.wav`,
-    durationEstimate: 45,
-    description: 'Bouncy upbeat anime choreography with happy steps.',
-  },
-  {
-    id: 'happy_hands',
-    name: 'Happy Hands (ハッピーハンズ)',
-    motionUrl: `${import.meta.env.BASE_URL}motions/happy_hands.vmd`,
-    audioUrl: `${import.meta.env.BASE_URL}audio/circus.wav`,
-    durationEstimate: 12,
-    description: 'Charming, cheerful hand gestures and head bobs.',
-  },
-];
+import { DANCE_TRACKS } from './motions/dance';
+export { DANCE_TRACKS };
 
 export class UIManager {
   private container: HTMLElement;

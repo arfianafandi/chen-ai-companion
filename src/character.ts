@@ -10,15 +10,13 @@ import type { EmotionType, BodyPart } from './types';
 import { tts, chenVoice, danceAudio } from './audio';
 import type { TrainedMotion, MotionPoseData } from './motionTrainer';
 
-export type IdleGesture = 
-  | 'none' 
-  | 'curious_tilt' 
-  | 'gentle_wave' 
-  | 'confident_officer' 
-  | 'shy_glance' 
-  | 'thinking_pose' 
-  | 'cute_nod' 
-  | 'stretch_relax';
+import { 
+  type IdleGesture, 
+  IDLE_GESTURES, 
+  evaluateIdleGesture 
+} from './motions/idle';
+
+export type { IdleGesture };
 
 export class ChenCharacter {
   public model: ThreeMmdModel | null = null;
@@ -572,18 +570,10 @@ export class ChenCharacter {
     if (this.currentGesture === 'none' && !this.activeCustomMotion && !this.previewPose) {
       this.timeUntilNextGesture -= delta;
       if (this.timeUntilNextGesture <= 0) {
-        const gestures: IdleGesture[] = [
-          'curious_tilt',
-          'gentle_wave',
-          'confident_officer',
-          'shy_glance',
-          'thinking_pose',
-          'cute_nod',
-          'stretch_relax'
-        ];
-        this.currentGesture = gestures[Math.floor(Math.random() * gestures.length)];
+        const randomDef = IDLE_GESTURES[Math.floor(Math.random() * IDLE_GESTURES.length)];
+        this.currentGesture = randomDef.id;
         this.gestureTimer = 0;
-        this.gestureDuration = 4.2;
+        this.gestureDuration = randomDef.duration;
       }
     } else if (this.currentGesture !== 'none') {
       this.gestureTimer += delta;
@@ -597,6 +587,15 @@ export class ChenCharacter {
         this.timeUntilNextGesture = 2.5 + Math.random() * 4.0; // Next automatic gesture every 2.5-6.5s!
       }
     }
+
+    // Evaluate active idle gesture module
+    const gestureOutput = evaluateIdleGesture(this.currentGesture, {
+      timer: this.gestureTimer,
+      weight: this.gestureWeight,
+      elapsedTime: this.elapsedTime,
+      breath,
+      sway,
+    });
 
     // Apply spine adjustments from trained motion
     if (effectivePose && this.customMotionWeight > 0 && this.spineBone) {
@@ -626,28 +625,19 @@ export class ChenCharacter {
     let rightWristTargetZ = 0.0;
     let rightWristTargetX = 0.0;
 
-    // Apply gesture arm motions
-    if (this.currentGesture === 'gentle_wave') {
-      // Right hand raises to wave gracefully
-      rightArmTargetX = THREE.MathUtils.lerp(rightArmTargetX, 0.48, this.gestureWeight);
-      rightArmTargetZ = THREE.MathUtils.lerp(rightArmTargetZ, 0.22, this.gestureWeight);
-      rightElbowTargetZ = THREE.MathUtils.lerp(rightElbowTargetZ, 0.62, this.gestureWeight);
-      rightWristTargetZ = Math.sin(this.gestureTimer * 6.5) * 0.24 * this.gestureWeight;
-      rightWristTargetX = 0.12 * this.gestureWeight;
-    } else if (this.currentGesture === 'thinking_pose') {
-      // Right hand touches chin thoughtfully
-      rightArmTargetX = THREE.MathUtils.lerp(rightArmTargetX, 0.36, this.gestureWeight);
-      rightArmTargetZ = THREE.MathUtils.lerp(rightArmTargetZ, 0.14, this.gestureWeight);
-      rightElbowTargetZ = THREE.MathUtils.lerp(rightElbowTargetZ, 0.68, this.gestureWeight);
-      rightWristTargetX = -0.14 * this.gestureWeight;
-    } else if (this.currentGesture === 'confident_officer') {
-      leftArmTargetX = THREE.MathUtils.lerp(leftArmTargetX, -0.09, this.gestureWeight);
-      rightArmTargetX = THREE.MathUtils.lerp(rightArmTargetX, -0.09, this.gestureWeight);
-      leftArmTargetZ = THREE.MathUtils.lerp(leftArmTargetZ, -0.68, this.gestureWeight);
-      rightArmTargetZ = THREE.MathUtils.lerp(rightArmTargetZ, 0.68, this.gestureWeight);
-    } else if (this.currentGesture === 'shy_glance') {
-      leftArmTargetZ = THREE.MathUtils.lerp(leftArmTargetZ, -0.68, this.gestureWeight);
-      rightArmTargetZ = THREE.MathUtils.lerp(rightArmTargetZ, 0.68, this.gestureWeight);
+    // Apply gesture arm modifications from modular gesture definition
+    if (gestureOutput) {
+      if (gestureOutput.leftArmTargetX !== undefined) leftArmTargetX = THREE.MathUtils.lerp(leftArmTargetX, gestureOutput.leftArmTargetX, this.gestureWeight);
+      if (gestureOutput.leftArmTargetZ !== undefined) leftArmTargetZ = THREE.MathUtils.lerp(leftArmTargetZ, gestureOutput.leftArmTargetZ, this.gestureWeight);
+      if (gestureOutput.leftArmTargetY !== undefined) leftArmTargetY = THREE.MathUtils.lerp(leftArmTargetY, gestureOutput.leftArmTargetY, this.gestureWeight);
+      if (gestureOutput.leftElbowTargetZ !== undefined) leftElbowTargetZ = THREE.MathUtils.lerp(leftElbowTargetZ, gestureOutput.leftElbowTargetZ, this.gestureWeight);
+
+      if (gestureOutput.rightArmTargetX !== undefined) rightArmTargetX = THREE.MathUtils.lerp(rightArmTargetX, gestureOutput.rightArmTargetX, this.gestureWeight);
+      if (gestureOutput.rightArmTargetZ !== undefined) rightArmTargetZ = THREE.MathUtils.lerp(rightArmTargetZ, gestureOutput.rightArmTargetZ, this.gestureWeight);
+      if (gestureOutput.rightArmTargetY !== undefined) rightArmTargetY = THREE.MathUtils.lerp(rightArmTargetY, gestureOutput.rightArmTargetY, this.gestureWeight);
+      if (gestureOutput.rightElbowTargetZ !== undefined) rightElbowTargetZ = THREE.MathUtils.lerp(rightElbowTargetZ, gestureOutput.rightElbowTargetZ, this.gestureWeight);
+      if (gestureOutput.rightWristTargetX !== undefined) rightWristTargetX = gestureOutput.rightWristTargetX;
+      if (gestureOutput.rightWristTargetZ !== undefined) rightWristTargetZ = gestureOutput.rightWristTargetZ;
     }
 
     // Apply custom trained motion pose to arms
@@ -744,37 +734,11 @@ export class ChenCharacter {
         );
       }
 
-      // Gesture head tilt & look offsets
-      let gestureHeadRoll = 0;
-      let gestureHeadPitch = 0;
-      let gestureHeadYaw = 0;
-      let gestureSmile = 0;
-
-      if (this.currentGesture === 'curious_tilt') {
-        gestureHeadRoll = 0.16 * this.gestureWeight; // Cute waifu head tilt
-        gestureHeadPitch = -0.04 * this.gestureWeight;
-        gestureSmile = 0.5 * this.gestureWeight;
-      } else if (this.currentGesture === 'gentle_wave') {
-        gestureHeadPitch = 0.04 * this.gestureWeight;
-        gestureSmile = 0.7 * this.gestureWeight;
-      } else if (this.currentGesture === 'confident_officer') {
-        gestureHeadPitch = -0.06 * this.gestureWeight;
-        gestureSmile = 0.3 * this.gestureWeight;
-      } else if (this.currentGesture === 'shy_glance') {
-        gestureHeadYaw = 0.28 * this.gestureWeight; // Shy glance away
-        gestureHeadPitch = 0.09 * this.gestureWeight;
-        gestureSmile = 0.3 * this.gestureWeight;
-      } else if (this.currentGesture === 'thinking_pose') {
-        gestureHeadRoll = -0.08 * this.gestureWeight;
-        gestureHeadPitch = -0.05 * this.gestureWeight;
-        gestureSmile = 0.1 * this.gestureWeight;
-      } else if (this.currentGesture === 'cute_nod') {
-        gestureHeadPitch = Math.sin(this.gestureTimer * 4.5) * 0.08 * this.gestureWeight;
-        gestureSmile = 0.6 * this.gestureWeight;
-      } else if (this.currentGesture === 'stretch_relax') {
-        gestureHeadPitch = 0.06 * this.gestureWeight;
-        gestureSmile = 0.4 * this.gestureWeight;
-      }
+      // Gesture head tilt & look offsets from active modular idle gesture
+      let gestureHeadRoll = gestureOutput?.headRoll ?? 0;
+      let gestureHeadPitch = gestureOutput?.headPitch ?? 0;
+      let gestureHeadYaw = gestureOutput?.headYaw ?? 0;
+      let gestureSmile = gestureOutput?.smile ?? 0;
 
       // Apply head roll, pitch, yaw and morphs from custom trained motion
       if (effectivePose && this.customMotionWeight > 0) {
@@ -805,14 +769,16 @@ export class ChenCharacter {
       if (gestureSmile > 0 && this.currentEmotion === 'normal') {
         this.applyMorphWeight('にこり', gestureSmile);
       }
-      if (this.currentGesture === 'shy_glance' && this.currentEmotion === 'normal') {
-        this.applyMorphWeight('照れ', 0.8 * this.gestureWeight);
+      if (gestureOutput?.blush && this.currentEmotion === 'normal') {
+        this.applyMorphWeight('照れ', gestureOutput.blush);
       }
 
       const activeLookTarget = this.targetLookAt.clone().add(this.saccadeOffset);
-      if (this.currentGesture === 'shy_glance') {
-        activeLookTarget.x += 4.5 * this.gestureWeight;
-        activeLookTarget.y -= 2.0 * this.gestureWeight;
+      if (gestureOutput?.lookAtOffsetX !== undefined) {
+        activeLookTarget.x += gestureOutput.lookAtOffsetX;
+      }
+      if (gestureOutput?.lookAtOffsetY !== undefined) {
+        activeLookTarget.y += gestureOutput.lookAtOffsetY;
       }
 
       this.currentLookAt.lerp(activeLookTarget, delta * 3.5);
