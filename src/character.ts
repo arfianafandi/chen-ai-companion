@@ -621,13 +621,25 @@ export class ChenCharacter {
       this.customMotionWeight = 0;
     }
 
-    if (this.currentGesture === 'none' && !this.activeCustomMotion && !this.previewPose) {
+    if (this.currentGesture === 'none' && !this.activeCustomMotion && !this.previewPose && !structuredMotionPlayer.isPlaying) {
       this.timeUntilNextGesture -= delta;
       if (this.timeUntilNextGesture <= 0) {
-        const randomDef = IDLE_GESTURES[Math.floor(Math.random() * IDLE_GESTURES.length)];
-        this.currentGesture = randomDef.id;
-        this.gestureTimer = 0;
-        this.gestureDuration = randomDef.duration;
+        // Occasionally trigger an authentic structured motion (Poke Dance sway, Neko paws, or Timothy idol cheer)
+        if (Math.random() < 0.35) {
+          const structuredIds = ['pokedance', 'yurusiteNeko', 'michinoTimothy'];
+          const picked = structuredIds[Math.floor(Math.random() * structuredIds.length)];
+          this.playStructuredMotion(picked, {
+            loop: false,
+            allowLookAt: true,
+            blendDuration: 0.45,
+          });
+          this.timeUntilNextGesture = 6.0 + Math.random() * 5.0;
+        } else {
+          const randomDef = IDLE_GESTURES[Math.floor(Math.random() * IDLE_GESTURES.length)];
+          this.currentGesture = randomDef.id;
+          this.gestureTimer = 0;
+          this.gestureDuration = randomDef.duration;
+        }
       }
     } else if (this.currentGesture !== 'none') {
       this.gestureTimer += delta;

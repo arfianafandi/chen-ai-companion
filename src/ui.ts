@@ -146,22 +146,20 @@ export class UIManager {
         </div>
         
         <div class="drawer-section">
-          <h4>💃 DANCE CHOREOGRAPHY <span style="font-size: 0.68rem; color: #00e5ff; background: rgba(0, 229, 255, 0.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 229, 255, 0.3);">⚡ 200+ BONE TS ENGINE</span></h4>
+          <h4>💃 DANCE CHOREOGRAPHY <span style="font-size: 0.68rem; color: #ff9d00; background: rgba(255, 157, 0, 0.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255, 157, 0, 0.3);">VMD ENGINE</span></h4>
           <p style="font-size: 0.78rem; color: #88a0b0; margin-bottom: 8px;">
-            Koreografi lengkap berbasis data TypeScript dengan 200–319 tulang, artikulasi sendi 30 jari, dan fisika Bullet realtime:
+            Tarian lengkap berdurasi penuh menggunakan file VMD MMD asli dengan musik & kamera:
           </p>
           <div class="dance-list">
-            ${DANCE_TRACKS.map(t => {
-              const isStructured = STRUCTURED_MOTIONS.some(m => m.id === t.id);
-              return `
+            ${DANCE_TRACKS.map(t => `
               <div class="dance-card" data-dance-id="${t.id}">
                 <div class="dance-card-info">
-                  <strong>${t.name} ${isStructured ? '<span style="color:#00e5ff; font-size:0.72rem; font-weight:normal;">[⚡ TS FULL VMD]</span>' : ''}</strong>
+                  <strong>${t.name}</strong>
                   <p>${t.description}</p>
                 </div>
                 <button class="dance-play-btn" data-dance="${t.id}">▶ Play</button>
               </div>
-            `;}).join('')}
+            `).join('')}
           </div>
           <button class="stop-dance-btn" id="stop-dance-btn" style="display: none;">
             ⏹ Stop Dance & Reset Idle
@@ -691,7 +689,15 @@ export class UIManager {
       // Update Chen
       this.chen.setEmotion(reply.emotion);
       if (reply.trainedMotion) {
-        this.chen.playTrainedMotion(reply.trainedMotion);
+        if (reply.trainedMotion.id === 'motion_poke_sway') {
+          this.chen.playStructuredMotion('pokedance', { loop: false, allowLookAt: true, blendDuration: 0.4 });
+        } else if (reply.trainedMotion.id === 'motion_neko_paws') {
+          this.chen.playStructuredMotion('yurusiteNeko', { loop: false, allowLookAt: true, blendDuration: 0.4 });
+        } else if (reply.trainedMotion.id === 'motion_idol_cheer') {
+          this.chen.playStructuredMotion('michinoTimothy', { loop: false, allowLookAt: true, blendDuration: 0.4 });
+        } else {
+          this.chen.playTrainedMotion(reply.trainedMotion);
+        }
       } else if (reply.gestureId) {
         this.chen.triggerGesture(reply.gestureId as any);
       }
@@ -1657,16 +1663,8 @@ export class UIManager {
     const stopBtn = this.container.querySelector('#stop-dance-btn') as HTMLElement;
     stopBtn.style.display = 'block';
 
-    const hasStructured = STRUCTURED_MOTIONS.some(m => m.id === danceId);
-    if (hasStructured) {
-      this.chen.playStructuredMotion(danceId, {
-        audioUrl: track.audioUrl,
-        loop: true,
-        allowLookAt: danceId === 'michinoTimothy',
-      });
-    } else {
-      this.chen.playDance(track.motionUrl, track.audioUrl, track.id);
-    }
+    // Pure VMD playback for full dances as requested
+    this.chen.playDance(track.motionUrl, track.audioUrl, track.id);
   }
 
   showSpeechBubble(text: string, emotion: EmotionType = 'normal', durationSeconds: number = 8) {
