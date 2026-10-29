@@ -212,10 +212,17 @@ export class InteractionManager {
   }
 
   triggerTouchReaction(part: BodyPart, clientX: number, clientY: number, hitPoint?: THREE.Vector3) {
+    // 0. For chest and cheek: purely physical squishy touch without dialogue, voice lines, emotion changes, or popups
+    if (part === 'chest' || part === 'cheek') {
+      this.chen.triggerTouchSpring(part, hitPoint, 1.0);
+      sfx.playSquishSound();
+      return;
+    }
+
     const list = TOUCH_REACTIONS[part] || TOUCH_REACTIONS.head;
     const reaction = list[Math.floor(Math.random() * list.length)];
 
-    // 0. Trigger Soft-Body Squish & Bounce Physics
+    // Trigger soft-body spring for other parts
     this.chen.triggerTouchSpring(part, hitPoint, 1.0);
 
     // 1. Play tactile sound
