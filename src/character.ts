@@ -83,6 +83,60 @@ export class ChenCharacter {
   private rightWristBone: THREE.Bone | null = null;
   private fingerBones: THREE.Bone[] = [];
 
+  // Tactile Soft-Body Spring Physics for Squishy Poking
+  private bustAdjustBone: THREE.Bone | null = null;
+  private leftChestBones: THREE.Bone[] = [];
+  private rightChestBones: THREE.Bone[] = [];
+  private leftChestSpring = {
+    displacement: 0,
+    velocity: 0,
+    lateralX: 0,
+    lateralVelX: 0,
+    lateralY: 0,
+    lateralVelY: 0,
+    stiffness: 200,
+    damping: 13.0,
+    mass: 1.0,
+  };
+  private rightChestSpring = {
+    displacement: 0,
+    velocity: 0,
+    lateralX: 0,
+    lateralVelX: 0,
+    lateralY: 0,
+    lateralVelY: 0,
+    stiffness: 200,
+    damping: 13.0,
+    mass: 1.0,
+  };
+  private torsoRecoilSpring = {
+    displacement: 0,
+    velocity: 0,
+    lateralX: 0,
+    lateralVelX: 0,
+    lateralY: 0,
+    lateralVelY: 0,
+    stiffness: 240,
+    damping: 16.0,
+    mass: 1.0,
+  };
+  private headSquishSpring = {
+    displacement: 0,
+    velocity: 0,
+    lateralX: 0,
+    lateralVelX: 0,
+    lateralY: 0,
+    lateralVelY: 0,
+    stiffness: 220,
+    damping: 14.0,
+    mass: 1.0,
+  };
+
+  // Interactive Drag & Pinch state
+  private isTouchingDrag = false;
+  private touchDragPart: BodyPart | null = null;
+  private touchDragSide: 'left' | 'right' | 'both' = 'both';
+
   // Head tracking (Target at Chen's eye level y=18.88)
   public targetLookAt = new THREE.Vector3(0, 18.8, 16.0);
   private currentLookAt = new THREE.Vector3(0, 18.8, 16.0);
@@ -273,6 +327,9 @@ export class ChenCharacter {
         else if (name === '右ひじ') this.rightElbowBone = bone;
         else if (name === '右手首') this.rightWristBone = bone;
         else if (name.includes('指')) this.fingerBones.push(bone);
+        else if (name === 'おっぱい調整') this.bustAdjustBone = bone;
+        else if (name.startsWith('左胸')) this.leftChestBones.push(bone);
+        else if (name.startsWith('右胸')) this.rightChestBones.push(bone);
       }
     }
 
@@ -314,8 +371,10 @@ export class ChenCharacter {
     createHitSphere('head', 1.5, new THREE.Vector3(0, 20.0, 0.2));
     // Face & Cheeks (y: 18.0 - 19.2)
     createHitSphere('cheek', 1.3, new THREE.Vector3(0, 18.5, 0.7));
-    // Chest / Heart (y: 14.5 - 16.5)
-    createHitSphere('chest', 1.7, new THREE.Vector3(0, 15.3, 0.5));
+    // Dual Left & Right Breast Hitboxes for accurate tactile squish & bounce
+    createHitSphere('chest', 1.35, new THREE.Vector3(0.65, 15.6, 0.85));
+    createHitSphere('chest', 1.35, new THREE.Vector3(-0.65, 15.6, 0.85));
+    createHitSphere('chest', 1.5, new THREE.Vector3(0, 15.3, 0.5));
     // Hands & Dual Blades (y: 11.5)
     createHitSphere('hand', 1.5, new THREE.Vector3(3.5, 12.0, 0.3));
     createHitSphere('hand', 1.5, new THREE.Vector3(-3.5, 12.0, 0.3));
@@ -721,6 +780,196 @@ export class ChenCharacter {
     }
   }
 
+  /**
+   * Trigger an instant squishy poke / tap impulse on a body part
+   */
+  public triggerTouchSpring(part: BodyPart, hitPointWorld?: THREE.Vector3, force = 1.0) {
+    if (part === 'chest') {
+      const x = hitPointWorld ? hitPointWorld.x : 0;
+      // In Three.js MMD coordinates, model faces +Z: x > 0.12 is left breast, x < -0.12 is right breast
+      if (x > 0.12) {
+        // Direct squish compression on left breast
+        this.leftChestSpring.displacement = -0.16 * force;
+        this.leftChestSpring.velocity = -2.3 * force;
+        this.leftChestSpring.lateralVelX = 1.3 * force;
+        this.leftChestSpring.lateralVelY = 0.8 * force;
+        // Sympathetic fluid/elastic wave on right breast
+        this.rightChestSpring.velocity = 0.9 * force;
+      } else if (x < -0.12) {
+        // Direct squish compression on right breast
+        this.rightChestSpring.displacement = -0.16 * force;
+        this.rightChestSpring.velocity = -2.3 * force;
+        this.rightChestSpring.lateralVelX = -1.3 * force;
+        this.rightChestSpring.lateralVelY = 0.8 * force;
+        // Sympathetic fluid/elastic wave on left breast
+        this.leftChestSpring.velocity = 0.9 * force;
+      } else {
+        // Center poke: both compress and bounce
+        this.leftChestSpring.displacement = -0.14 * force;
+        this.leftChestSpring.velocity = -2.0 * force;
+        this.rightChestSpring.displacement = -0.14 * force;
+        this.rightChestSpring.velocity = -2.0 * force;
+      }
+      // Upper chest torso recoil
+      this.torsoRecoilSpring.velocity = -1.2 * force;
+    } else if (part === 'cheek') {
+      const x = hitPointWorld ? hitPointWorld.x : 0;
+      this.headSquishSpring.displacement = -0.06 * force;
+      this.headSquishSpring.velocity = (x > 0 ? 0.7 : -0.7) * force;
+    } else if (part === 'head') {
+      this.headSquishSpring.displacement = -0.08 * force;
+      this.headSquishSpring.velocity = -1.1 * force;
+    }
+  }
+
+  /**
+   * Start dragging / pressing into the soft body
+   */
+  public startTouchDrag(part: BodyPart, hitPointWorld?: THREE.Vector3) {
+    this.isTouchingDrag = true;
+    this.touchDragPart = part;
+    if (part === 'chest') {
+      const x = hitPointWorld ? hitPointWorld.x : 0;
+      if (x > 0.12) this.touchDragSide = 'left';
+      else if (x < -0.12) this.touchDragSide = 'right';
+      else this.touchDragSide = 'both';
+    }
+  }
+
+  /**
+   * Update active drag deformation
+   */
+  public updateTouchDrag(screenDeltaX: number, screenDeltaY: number) {
+    if (!this.isTouchingDrag || this.touchDragPart !== 'chest') return;
+    const inward = Math.max(-0.25, Math.min(0.2, screenDeltaY * -0.0025));
+    const lateral = Math.max(-0.15, Math.min(0.15, screenDeltaX * 0.002));
+
+    if (this.touchDragSide === 'left' || this.touchDragSide === 'both') {
+      this.leftChestSpring.displacement = inward;
+      this.leftChestSpring.lateralX = lateral;
+      this.leftChestSpring.velocity = 0;
+    }
+    if (this.touchDragSide === 'right' || this.touchDragSide === 'both') {
+      this.rightChestSpring.displacement = inward;
+      this.rightChestSpring.lateralX = -lateral;
+      this.rightChestSpring.velocity = 0;
+    }
+  }
+
+  /**
+   * Release active drag and let soft body snap back and jiggle
+   */
+  public releaseTouchDrag() {
+    if (!this.isTouchingDrag) return;
+    if (this.touchDragPart === 'chest') {
+      if (this.touchDragSide === 'left' || this.touchDragSide === 'both') {
+        this.leftChestSpring.velocity = -this.leftChestSpring.displacement * 16.0;
+      }
+      if (this.touchDragSide === 'right' || this.touchDragSide === 'both') {
+        this.rightChestSpring.velocity = -this.rightChestSpring.displacement * 16.0;
+      }
+      this.torsoRecoilSpring.velocity = 0.8;
+    }
+    this.isTouchingDrag = false;
+    this.touchDragPart = null;
+  }
+
+  private updateTouchSpringPhysics(dt: number) {
+    if (!this.mesh || !this.mesh.skeleton) return;
+
+    // Helper to step a spring with semi-implicit Euler
+    const step = (s: any, isHeld: boolean) => {
+      if (isHeld) return;
+      const forceZ = -s.stiffness * s.displacement - s.damping * s.velocity;
+      s.velocity += (forceZ / s.mass) * dt;
+      s.displacement += s.velocity * dt;
+
+      // Lateral Poisson bulge proportional to inward squish
+      const targetBulge = Math.max(0, -s.displacement) * 0.45;
+      const forceLatX = -s.stiffness * 1.2 * (s.lateralX - targetBulge) - s.damping * 1.1 * s.lateralVelX;
+      s.lateralVelX += forceLatX * dt;
+      s.lateralX += s.lateralVelX * dt;
+
+      const forceLatY = -s.stiffness * 1.2 * (s.lateralY - targetBulge * 0.6) - s.damping * 1.1 * s.lateralVelY;
+      s.lateralVelY += forceLatY * dt;
+      s.lateralY += s.lateralVelY * dt;
+
+      if (Math.abs(s.displacement) < 0.0002 && Math.abs(s.velocity) < 0.001) {
+        s.displacement = 0;
+        s.velocity = 0;
+        s.lateralX = 0;
+        s.lateralVelX = 0;
+        s.lateralY = 0;
+        s.lateralVelY = 0;
+      }
+    };
+
+    const isLeftHeld = this.isTouchingDrag && (this.touchDragSide === 'left' || this.touchDragSide === 'both');
+    const isRightHeld = this.isTouchingDrag && (this.touchDragSide === 'right' || this.touchDragSide === 'both');
+
+    step(this.leftChestSpring, isLeftHeld);
+    step(this.rightChestSpring, isRightHeld);
+    step(this.torsoRecoilSpring, false);
+    step(this.headSquishSpring, false);
+
+    const hasChestMotion = Math.abs(this.leftChestSpring.displacement) > 0.0001 ||
+                           Math.abs(this.rightChestSpring.displacement) > 0.0001 ||
+                           Math.abs(this.leftChestSpring.velocity) > 0.001 ||
+                           Math.abs(this.rightChestSpring.velocity) > 0.001;
+
+    const hasTorsoMotion = Math.abs(this.torsoRecoilSpring.displacement) > 0.0001;
+    const hasHeadMotion = Math.abs(this.headSquishSpring.displacement) > 0.0001 || Math.abs(this.headSquishSpring.velocity) > 0.001;
+
+    if (!hasChestMotion && !hasTorsoMotion && !hasHeadMotion) return;
+
+    // Apply left breast squish & bounce
+    if (this.leftChestBones.length > 0) {
+      const dispZ = this.leftChestSpring.displacement;
+      const bulgeX = this.leftChestSpring.lateralX;
+      const bulgeY = this.leftChestSpring.lateralY;
+      for (const bone of this.leftChestBones) {
+        bone.position.z += dispZ;
+        bone.position.x += bulgeX * 0.6;
+        bone.position.y += bulgeY * 0.4;
+        bone.rotation.x += dispZ * 0.4;
+        bone.rotation.z += dispZ * 0.2;
+      }
+    }
+
+    // Apply right breast squish & bounce
+    if (this.rightChestBones.length > 0) {
+      const dispZ = this.rightChestSpring.displacement;
+      const bulgeX = this.rightChestSpring.lateralX;
+      const bulgeY = this.rightChestSpring.lateralY;
+      for (const bone of this.rightChestBones) {
+        bone.position.z += dispZ;
+        bone.position.x -= bulgeX * 0.6;
+        bone.position.y += bulgeY * 0.4;
+        bone.rotation.x += dispZ * 0.4;
+        bone.rotation.z -= dispZ * 0.2;
+      }
+    }
+
+    // Bust adjust bone (parent) subtle center dip
+    if (this.bustAdjustBone) {
+      const avgDisp = (this.leftChestSpring.displacement + this.rightChestSpring.displacement) * 0.5;
+      this.bustAdjustBone.position.z += avgDisp * 0.35;
+    }
+
+    // Torso subtle recoil
+    if (this.spine2Bone && hasTorsoMotion) {
+      this.spine2Bone.rotation.x += this.torsoRecoilSpring.displacement * 0.06;
+    }
+
+    // Head / cheek squish tilt & bob
+    if (this.headBone && hasHeadMotion) {
+      this.headBone.position.y += this.headSquishSpring.displacement * 0.5;
+      this.headBone.rotation.z += this.headSquishSpring.velocity * 0.04;
+    }
+
+    this.mesh.skeleton.update();
+  }
+
   update(delta: number) {
     if (!this.model || !this.mesh) return;
 
@@ -830,6 +1079,9 @@ export class ChenCharacter {
       if (this.physicsEnabled) {
         this.updateIdlePhysics(clampedDelta);
       }
+
+      // 3b. Interactive tactile squish & spring bounce physics (poking, pinching, recoil)
+      this.updateTouchSpringPhysics(clampedDelta);
     }
 
     // 4. Smooth expression morph interpolation

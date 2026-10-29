@@ -74,6 +74,28 @@ class SoundFX {
     } catch {}
   }
 
+  // Elastic soft squish / bouncy spring sound for tactile poke & jiggle
+  playSquishSound() {
+    try {
+      const ctx = this.initCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      const now = ctx.currentTime;
+      // Rubbery cute spring sweep: dip then wobble up
+      osc.frequency.setValueAtTime(280, now);
+      osc.frequency.exponentialRampToValueAtTime(130, now + 0.05);
+      osc.frequency.exponentialRampToValueAtTime(340, now + 0.13);
+      osc.frequency.exponentialRampToValueAtTime(190, now + 0.22);
+      gain.gain.setValueAtTime(0.13, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch {}
+  }
+
   // Martial sword draw / high-five sound
   playMartialSound() {
     try {

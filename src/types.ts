@@ -19,7 +19,7 @@ export interface TouchReaction {
   expression: EmotionType;
   dialogue: string;
   affectionGain: number;
-  soundType: 'cute' | 'heart' | 'blush' | 'martial';
+  soundType: 'cute' | 'heart' | 'blush' | 'martial' | 'squish';
   voiceKey?: string;
 }
 

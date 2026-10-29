@@ -66,18 +66,27 @@ export const TOUCH_REACTIONS: Record<BodyPart, TouchReaction[]> = {
   chest: [
     {
       part: 'chest',
-      name: 'Chest Touch',
+      name: 'Sensasi Kenyal',
       expression: 'blush',
-      dialogue: 'A-Administrator?! What are you touching! My tactical armor is not a toy! [EMOTE:blush]',
-      affectionGain: 3,
-      soundType: 'blush',
+      dialogue: 'A-Administrator?! K-kenapa dicolek seperti itu... terasa kenyal bukan berarti boleh ditekan-tekan terus! [EMOTE:blush]',
+      affectionGain: 4,
+      soundType: 'squish',
+      voiceKey: 'chest_1',
+    },
+    {
+      part: 'chest',
+      name: 'Pinch & Poke',
+      expression: 'surprised',
+      dialogue: 'Hyaaa?! Mengagetkan sekali! Armor taktisku bukan mainan pereda stres, Administrator! [EMOTE:surprised]',
+      affectionGain: 4,
+      soundType: 'squish',
       voiceKey: 'chest_1',
     },
     {
       part: 'chest',
       name: 'Heartbeat Check',
       expression: 'jitome',
-      dialogue: 'My heart rate just spiked by forty percent... and it is entirely your fault! [EMOTE:jitome]',
+      dialogue: 'Detak jantungku baru saja melonjak empat puluh persen... dan ini sepenuhnya salahmu! [EMOTE:jitome]',
       affectionGain: 3,
       soundType: 'blush',
       voiceKey: 'chest_1',
@@ -123,6 +132,9 @@ export class InteractionManager {
   private camera: THREE.Camera;
   private container: HTMLElement;
   public onTouchDialogue?: (text: string, emotion: EmotionType) => void;
+  private isDraggingTouch = false;
+  private dragStartX = 0;
+  private dragStartY = 0;
 
   constructor(chen: ChenCharacter, camera: THREE.Camera, container: HTMLElement) {
     this.chen = chen;
@@ -135,10 +147,17 @@ export class InteractionManager {
   private setupListeners() {
     this.container.addEventListener('pointerdown', this.onPointerDown.bind(this));
     this.container.addEventListener('pointermove', this.onPointerMove.bind(this));
+    window.addEventListener('pointerup', this.onPointerUp.bind(this));
   }
 
   // Update Look-at Target for Head tracking
   private onPointerMove(e: PointerEvent) {
+    if (this.isDraggingTouch) {
+      const deltaX = e.clientX - this.dragStartX;
+      const deltaY = e.clientY - this.dragStartY;
+      this.chen.updateTouchDrag(deltaX, deltaY);
+    }
+
     if (this.chen.isDancing) return;
 
     const rect = this.container.getBoundingClientRect();
@@ -155,6 +174,14 @@ export class InteractionManager {
     // Constrain height around Chen's head (y: 16 - 22)
     targetPos.y = Math.max(15, Math.min(23, targetPos.y));
     this.chen.targetLookAt.copy(targetPos);
+  }
+
+  private onPointerUp() {
+    if (this.isDraggingTouch) {
+      this.chen.releaseTouchDrag();
+      sfx.playSquishSound();
+      this.isDraggingTouch = false;
+    }
   }
 
   private onPointerDown(e: PointerEvent) {
@@ -179,7 +206,16 @@ export class InteractionManager {
     if (intersects.length > 0) {
       const hitObj = intersects[0].object;
       const part = hitObj.userData.bodyPart as BodyPart;
-      this.triggerTouchReaction(part, e.clientX, e.clientY);
+      const hitPoint = intersects[0].point;
+
+      if (part === 'chest') {
+        this.isDraggingTouch = true;
+        this.dragStartX = e.clientX;
+        this.dragStartY = e.clientY;
+        this.chen.startTouchDrag('chest', hitPoint);
+      }
+
+      this.triggerTouchReaction(part, e.clientX, e.clientY, hitPoint);
       return;
     }
 
@@ -196,17 +232,28 @@ export class InteractionManager {
         else if (hitPoint.y > 9.0 && Math.abs(hitPoint.x) > 1.8) detectedPart = 'hand';
         else detectedPart = 'leg';
 
-        this.triggerTouchReaction(detectedPart, e.clientX, e.clientY);
+        if (detectedPart === 'chest') {
+          this.isDraggingTouch = true;
+          this.dragStartX = e.clientX;
+          this.dragStartY = e.clientY;
+          this.chen.startTouchDrag('chest', hitPoint);
+        }
+
+        this.triggerTouchReaction(detectedPart, e.clientX, e.clientY, hitPoint);
       }
     }
   }
 
-  triggerTouchReaction(part: BodyPart, clientX: number, clientY: number) {
+  triggerTouchReaction(part: BodyPart, clientX: number, clientY: number, hitPoint?: THREE.Vector3) {
     const list = TOUCH_REACTIONS[part] || TOUCH_REACTIONS.head;
     const reaction = list[Math.floor(Math.random() * list.length)];
 
-    // 1. Play sound
-    if (reaction.soundType === 'heart') sfx.playHeartChime();
+    // 0. Trigger Soft-Body Squish & Bounce Physics
+    this.chen.triggerTouchSpring(part, hitPoint, 1.0);
+
+    // 1. Play tactile sound
+    if (reaction.soundType === 'squish') sfx.playSquishSound();
+    else if (reaction.soundType === 'heart') sfx.playHeartChime();
     else if (reaction.soundType === 'blush') sfx.playBlushSound();
     else if (reaction.soundType === 'martial') sfx.playMartialSound();
     else sfx.playClick();
