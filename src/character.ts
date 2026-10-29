@@ -87,6 +87,12 @@ export class ChenCharacter {
   private bustAdjustBone: THREE.Bone | null = null;
   private leftChestBones: THREE.Bone[] = [];
   private rightChestBones: THREE.Bone[] = [];
+  private leftBreastBone: THREE.Bone | null = null;
+  private rightBreastBone: THREE.Bone | null = null;
+  private appliedLeftChestZ = 0;
+  private appliedLeftChestX = 0;
+  private appliedRightChestZ = 0;
+  private appliedRightChestX = 0;
   private leftCheekBones: THREE.Bone[] = [];
   private rightCheekBones: THREE.Bone[] = [];
 
@@ -97,8 +103,8 @@ export class ChenCharacter {
     lateralVelX: 0,
     lateralY: 0,
     lateralVelY: 0,
-    stiffness: 200,
-    damping: 13.0,
+    stiffness: 75,
+    damping: 6.2,
     mass: 1.0,
   };
   private rightChestSpring = {
@@ -108,8 +114,8 @@ export class ChenCharacter {
     lateralVelX: 0,
     lateralY: 0,
     lateralVelY: 0,
-    stiffness: 200,
-    damping: 13.0,
+    stiffness: 75,
+    damping: 6.2,
     mass: 1.0,
   };
   private leftCheekSpring = {
@@ -119,8 +125,8 @@ export class ChenCharacter {
     lateralVelX: 0,
     lateralY: 0,
     lateralVelY: 0,
-    stiffness: 230,
-    damping: 14.5,
+    stiffness: 95,
+    damping: 7.5,
     mass: 1.0,
   };
   private rightCheekSpring = {
@@ -130,8 +136,8 @@ export class ChenCharacter {
     lateralVelX: 0,
     lateralY: 0,
     lateralVelY: 0,
-    stiffness: 230,
-    damping: 14.5,
+    stiffness: 95,
+    damping: 7.5,
     mass: 1.0,
   };
   private torsoRecoilSpring = {
@@ -350,8 +356,14 @@ export class ChenCharacter {
         else if (name === '右手首') this.rightWristBone = bone;
         else if (name.includes('指')) this.fingerBones.push(bone);
         else if (name === 'おっぱい調整') this.bustAdjustBone = bone;
-        else if (name.startsWith('左胸')) this.leftChestBones.push(bone);
-        else if (name.startsWith('右胸')) this.rightChestBones.push(bone);
+        else if (name.startsWith('左胸')) {
+          this.leftChestBones.push(bone);
+          if (name === '左胸上2') this.leftBreastBone = bone;
+        }
+        else if (name.startsWith('右胸')) {
+          this.rightChestBones.push(bone);
+          if (name === '右胸上2') this.rightBreastBone = bone;
+        }
         else if (name.startsWith('faceLfCheek') || name.includes('左頬')) this.leftCheekBones.push(bone);
         else if (name.startsWith('faceRtCheek') || name.includes('右頬')) this.rightCheekBones.push(bone);
       }
@@ -397,9 +409,10 @@ export class ChenCharacter {
     createHitSphere('cheek', 1.05, new THREE.Vector3(0.68, 18.4, 0.72));
     createHitSphere('cheek', 1.05, new THREE.Vector3(-0.68, 18.4, 0.72));
     createHitSphere('cheek', 1.25, new THREE.Vector3(0, 18.3, 0.7));
-    // Dual Left & Right Breast Hitboxes (Strictly localized to breasts only)
-    createHitSphere('chest', 1.05, new THREE.Vector3(0.68, 15.65, 0.95));
-    createHitSphere('chest', 1.05, new THREE.Vector3(-0.68, 15.65, 0.95));
+    // Dual Left & Right Breast Hitboxes + Cleavage Center (Strictly localized to breasts)
+    createHitSphere('chest', 1.15, new THREE.Vector3(0.68, 15.65, 0.95));
+    createHitSphere('chest', 1.15, new THREE.Vector3(-0.68, 15.65, 0.95));
+    createHitSphere('chest', 1.05, new THREE.Vector3(0, 15.65, 0.90));
     // Hands & Dual Blades (y: 11.5)
     createHitSphere('hand', 1.5, new THREE.Vector3(3.5, 12.0, 0.3));
     createHitSphere('hand', 1.5, new THREE.Vector3(-3.5, 12.0, 0.3));
@@ -813,40 +826,44 @@ export class ChenCharacter {
       const x = hitPointWorld ? hitPointWorld.x : 0;
       // In Three.js MMD coordinates, model faces +Z: x > 0.05 is left breast, x < -0.05 is right breast
       if (x > 0.05) {
-        // Pure in-place elastic squish on left breast (ZERO vertical shift Y, stays perfectly in place!)
-        this.leftChestSpring.displacement = -0.085 * force;
-        this.leftChestSpring.velocity = -1.8 * force;
-        this.leftChestSpring.lateralVelX = 0.4 * force;
+        // Pure soft elastic squish on left breast (Z inward compression + X lateral expansion, ZERO Y movement!)
+        this.leftChestSpring.displacement = -0.24 * force;
+        this.leftChestSpring.velocity = -2.2 * force;
+        this.leftChestSpring.lateralVelX = 1.1 * force;
         this.leftChestSpring.lateralVelY = 0;
       } else if (x < -0.05) {
-        // Pure in-place elastic squish on right breast (ZERO vertical shift Y, stays perfectly in place!)
-        this.rightChestSpring.displacement = -0.085 * force;
-        this.rightChestSpring.velocity = -1.8 * force;
-        this.rightChestSpring.lateralVelX = -0.4 * force;
+        // Pure soft elastic squish on right breast (Z inward compression + X lateral expansion, ZERO Y movement!)
+        this.rightChestSpring.displacement = -0.24 * force;
+        this.rightChestSpring.velocity = -2.2 * force;
+        this.rightChestSpring.lateralVelX = -1.1 * force;
         this.rightChestSpring.lateralVelY = 0;
       } else {
-        // Center poke: gentle in-place squish
-        this.leftChestSpring.displacement = -0.07 * force;
-        this.leftChestSpring.velocity = -1.5 * force;
-        this.rightChestSpring.displacement = -0.07 * force;
-        this.rightChestSpring.velocity = -1.5 * force;
+        // Cleavage center poke: gentle in-place squish on both breasts
+        this.leftChestSpring.displacement = -0.18 * force;
+        this.leftChestSpring.velocity = -1.7 * force;
+        this.leftChestSpring.lateralVelX = 0.7 * force;
+        this.leftChestSpring.lateralVelY = 0;
+        this.rightChestSpring.displacement = -0.18 * force;
+        this.rightChestSpring.velocity = -1.7 * force;
+        this.rightChestSpring.lateralVelX = -0.7 * force;
+        this.rightChestSpring.lateralVelY = 0;
       }
     } else if (part === 'cheek') {
       const x = hitPointWorld ? hitPointWorld.x : 0;
       if (x >= 0) {
-        // Left cheek squish in-place
-        this.leftCheekSpring.displacement = -0.08 * force;
-        this.leftCheekSpring.velocity = -1.7 * force;
-        this.leftCheekSpring.lateralVelX = 0.35 * force;
+        // Left cheek squish in-place (Z depth poke + X outward bulge, ZERO Y movement)
+        this.leftCheekSpring.displacement = -0.16 * force;
+        this.leftCheekSpring.velocity = -1.8 * force;
+        this.leftCheekSpring.lateralVelX = 0.6 * force;
         this.leftCheekSpring.lateralVelY = 0;
-        this.headSquishSpring.velocity = 0.4 * force;
+        this.headSquishSpring.velocity = 0.3 * force;
       } else {
-        // Right cheek squish in-place
-        this.rightCheekSpring.displacement = -0.08 * force;
-        this.rightCheekSpring.velocity = -1.7 * force;
-        this.rightCheekSpring.lateralVelX = -0.35 * force;
+        // Right cheek squish in-place (Z depth poke + X outward bulge, ZERO Y movement)
+        this.rightCheekSpring.displacement = -0.16 * force;
+        this.rightCheekSpring.velocity = -1.8 * force;
+        this.rightCheekSpring.lateralVelX = -0.6 * force;
         this.rightCheekSpring.lateralVelY = 0;
-        this.headSquishSpring.velocity = -0.4 * force;
+        this.headSquishSpring.velocity = -0.3 * force;
       }
     } else if (part === 'head') {
       this.headSquishSpring.displacement = -0.06 * force;
@@ -857,6 +874,14 @@ export class ChenCharacter {
   private updateTouchSpringPhysics(dt: number) {
     if (!this.mesh || !this.mesh.skeleton) return;
 
+    // Fallback: ensure leftBreastBone and rightBreastBone are assigned if not already
+    if (!this.leftBreastBone && this.leftChestBones.length > 0) {
+      this.leftBreastBone = this.leftChestBones.find(b => b.name === '左胸上2') || this.leftChestBones[0];
+    }
+    if (!this.rightBreastBone && this.rightChestBones.length > 0) {
+      this.rightBreastBone = this.rightChestBones.find(b => b.name === '右胸上2') || this.rightChestBones[0];
+    }
+
     // Helper to step a spring with semi-implicit Euler
     const step = (s: any) => {
       const forceZ = -s.stiffness * s.displacement - s.damping * s.velocity;
@@ -864,16 +889,12 @@ export class ChenCharacter {
       s.displacement += s.velocity * dt;
 
       // Lateral Poisson bulge proportional to inward squish
-      const targetBulge = Math.max(0, -s.displacement) * 0.45;
-      const forceLatX = -s.stiffness * 1.2 * (s.lateralX - targetBulge) - s.damping * 1.1 * s.lateralVelX;
+      const targetBulge = Math.max(0, -s.displacement) * 0.4;
+      const forceLatX = -s.stiffness * 1.1 * (s.lateralX - targetBulge) - s.damping * 1.0 * s.lateralVelX;
       s.lateralVelX += forceLatX * dt;
       s.lateralX += s.lateralVelX * dt;
 
-      const forceLatY = -s.stiffness * 1.2 * (s.lateralY - targetBulge * 0.6) - s.damping * 1.1 * s.lateralVelY;
-      s.lateralVelY += forceLatY * dt;
-      s.lateralY += s.lateralVelY * dt;
-
-      if (Math.abs(s.displacement) < 0.0002 && Math.abs(s.velocity) < 0.001) {
+      if (Math.abs(s.displacement) < 0.0003 && Math.abs(s.velocity) < 0.001) {
         s.displacement = 0;
         s.velocity = 0;
         s.lateralX = 0;
@@ -903,134 +924,26 @@ export class ChenCharacter {
     const hasTorsoMotion = Math.abs(this.torsoRecoilSpring.displacement) > 0.0001;
     const hasHeadMotion = Math.abs(this.headSquishSpring.displacement) > 0.0001 || Math.abs(this.headSquishSpring.velocity) > 0.001;
 
-    // When all motions settle to 0, ensure all affected bones return to exact rest transforms
-    if (!hasChestMotion && !hasCheekMotion && !hasTorsoMotion && !hasHeadMotion) {
-      let needsSkeletonUpdate = false;
-      if (this.chestBonesActive) {
-        if (this.bustAdjustBone) {
-          const rest = this.boneRestTransforms.get(this.bustAdjustBone);
-          if (rest) this.bustAdjustBone.position.copy(rest.position);
-        }
-        for (const bone of this.leftChestBones) {
-          const rest = this.boneRestTransforms.get(bone);
-          if (rest) {
-            bone.position.copy(rest.position);
-            bone.quaternion.copy(rest.quaternion);
-          }
-        }
-        for (const bone of this.rightChestBones) {
-          const rest = this.boneRestTransforms.get(bone);
-          if (rest) {
-            bone.position.copy(rest.position);
-            bone.quaternion.copy(rest.quaternion);
-          }
-        }
-        this.chestBonesActive = false;
-        needsSkeletonUpdate = true;
+    // Reset chest bones when chest motion has settled back to 0
+    if (!hasChestMotion && this.chestBonesActive) {
+      if (this.leftBreastBone) {
+        this.leftBreastBone.position.z -= this.appliedLeftChestZ;
+        this.leftBreastBone.position.x -= this.appliedLeftChestX;
       }
-      if (this.cheekBonesActive) {
-        for (const bone of this.leftCheekBones) {
-          const rest = this.boneRestTransforms.get(bone);
-          if (rest) bone.position.copy(rest.position);
-        }
-        for (const bone of this.rightCheekBones) {
-          const rest = this.boneRestTransforms.get(bone);
-          if (rest) bone.position.copy(rest.position);
-        }
-        this.cheekBonesActive = false;
-        needsSkeletonUpdate = true;
+      if (this.rightBreastBone) {
+        this.rightBreastBone.position.z -= this.appliedRightChestZ;
+        this.rightBreastBone.position.x -= this.appliedRightChestX;
       }
-      if (needsSkeletonUpdate) {
-        this.mesh.skeleton.update();
-      }
-      return;
-    }
-
-    // 1. CHEST SQUISH & BOUNCE (Computed strictly from immutable rest transforms)
-    if (hasChestMotion) {
-      this.chestBonesActive = true;
-      const leftDispZ = this.leftChestSpring.displacement;
-      const leftBulgeX = this.leftChestSpring.lateralX;
-      const leftBulgeY = this.leftChestSpring.lateralY;
-
-      const rightDispZ = this.rightChestSpring.displacement;
-      const rightBulgeX = this.rightChestSpring.lateralX;
-      const rightBulgeY = this.rightChestSpring.lateralY;
-
-      // Do not move bustAdjustBone base so surrounding sternum/jacket stays 100% still
-
-      // Left breast bones (Pure in-place squish: Y and rotation locked, no moving up!)
-      for (const bone of this.leftChestBones) {
-        const rest = this.boneRestTransforms.get(bone);
-        if (rest) {
-          bone.position.x = rest.position.x + leftBulgeX * 0.25;
-          bone.position.y = rest.position.y; // Strictly locked: does NOT move up!
-          bone.position.z = rest.position.z + leftDispZ;
-          bone.quaternion.copy(rest.quaternion); // Strictly locked: does NOT pitch/tilt!
-        }
-      }
-
-      // Right breast bones (Pure in-place squish: Y and rotation locked, no moving up!)
-      for (const bone of this.rightChestBones) {
-        const rest = this.boneRestTransforms.get(bone);
-        if (rest) {
-          bone.position.x = rest.position.x - rightBulgeX * 0.25;
-          bone.position.y = rest.position.y; // Strictly locked: does NOT move up!
-          bone.position.z = rest.position.z + rightDispZ;
-          bone.quaternion.copy(rest.quaternion); // Strictly locked: does NOT pitch/tilt!
-        }
-      }
-    } else if (this.chestBonesActive) {
-      if (this.bustAdjustBone) {
-        const rest = this.boneRestTransforms.get(this.bustAdjustBone);
-        if (rest) this.bustAdjustBone.position.copy(rest.position);
-      }
-      for (const bone of this.leftChestBones) {
-        const rest = this.boneRestTransforms.get(bone);
-        if (rest) {
-          bone.position.copy(rest.position);
-          bone.quaternion.copy(rest.quaternion);
-        }
-      }
-      for (const bone of this.rightChestBones) {
-        const rest = this.boneRestTransforms.get(bone);
-        if (rest) {
-          bone.position.copy(rest.position);
-          bone.quaternion.copy(rest.quaternion);
-        }
-      }
+      this.appliedLeftChestZ = 0;
+      this.appliedLeftChestX = 0;
+      this.appliedRightChestZ = 0;
+      this.appliedRightChestX = 0;
       this.chestBonesActive = false;
+      this.mesh.skeleton.update();
     }
 
-    // 2. CHEEK SQUISH & BOUNCE (Computed strictly from immutable rest transforms)
-    if (hasCheekMotion) {
-      this.cheekBonesActive = true;
-      const leftDispZ = this.leftCheekSpring.displacement;
-      const leftBulgeX = this.leftCheekSpring.lateralX;
-      const leftBulgeY = this.leftCheekSpring.lateralY;
-
-      const rightDispZ = this.rightCheekSpring.displacement;
-      const rightBulgeX = this.rightCheekSpring.lateralX;
-      const rightBulgeY = this.rightCheekSpring.lateralY;
-
-      for (const bone of this.leftCheekBones) {
-        const rest = this.boneRestTransforms.get(bone);
-        if (rest) {
-          bone.position.x = rest.position.x + leftBulgeX * 0.25;
-          bone.position.y = rest.position.y; // Strictly locked: does NOT move up!
-          bone.position.z = rest.position.z + leftDispZ;
-        }
-      }
-
-      for (const bone of this.rightCheekBones) {
-        const rest = this.boneRestTransforms.get(bone);
-        if (rest) {
-          bone.position.x = rest.position.x + rightBulgeX * 0.25;
-          bone.position.y = rest.position.y; // Strictly locked: does NOT move up!
-          bone.position.z = rest.position.z + rightDispZ;
-        }
-      }
-    } else if (this.cheekBonesActive) {
+    // Reset cheek bones when cheek motion has settled back to 0
+    if (!hasCheekMotion && this.cheekBonesActive) {
       for (const bone of this.leftCheekBones) {
         const rest = this.boneRestTransforms.get(bone);
         if (rest) bone.position.copy(rest.position);
@@ -1040,13 +953,77 @@ export class ChenCharacter {
         if (rest) bone.position.copy(rest.position);
       }
       this.cheekBonesActive = false;
+      this.mesh.skeleton.update();
     }
 
-    // Torso recoil completely removed so surrounding upper body stays 100% still
+    if (!hasChestMotion && !hasCheekMotion && !hasTorsoMotion && !hasHeadMotion) {
+      return;
+    }
 
-    // 4. Head / cheek squish tilt & bob
+    // 1. CHEST SQUISH & BOUNCE (Pure in-place soft-body spring deformation: depth Z & lateral bulge X ONLY!)
+    // Zero vertical shift Y! Zero rotation/pitch! Stays 100% stationary vertically and only squishes elastically in place!
+    if (hasChestMotion) {
+      this.chestBonesActive = true;
+      const targetLeftZ = this.leftChestSpring.displacement;
+      const targetLeftX = this.leftChestSpring.lateralX;
+      const targetRightZ = this.rightChestSpring.displacement;
+      const targetRightX = -this.rightChestSpring.lateralX;
+
+      if (this.leftBreastBone) {
+        // Revert previous frame delta then apply current frame delta
+        this.leftBreastBone.position.z -= this.appliedLeftChestZ;
+        this.leftBreastBone.position.x -= this.appliedLeftChestX;
+
+        this.appliedLeftChestZ = targetLeftZ;
+        this.appliedLeftChestX = targetLeftX;
+
+        this.leftBreastBone.position.z += this.appliedLeftChestZ;
+        this.leftBreastBone.position.x += this.appliedLeftChestX;
+      }
+
+      if (this.rightBreastBone) {
+        // Revert previous frame delta then apply current frame delta
+        this.rightBreastBone.position.z -= this.appliedRightChestZ;
+        this.rightBreastBone.position.x -= this.appliedRightChestX;
+
+        this.appliedRightChestZ = targetRightZ;
+        this.appliedRightChestX = targetRightX;
+
+        this.rightBreastBone.position.z += this.appliedRightChestZ;
+        this.rightBreastBone.position.x += this.appliedRightChestX;
+      }
+    }
+
+    // 2. CHEEKS SQUISH & BOUNCE (Restored accurately from immutable rest transforms, zero vertical shift)
+    if (hasCheekMotion) {
+      this.cheekBonesActive = true;
+      const leftDispZ = this.leftCheekSpring.displacement;
+      const leftBulgeX = this.leftCheekSpring.lateralX;
+      const rightDispZ = this.rightCheekSpring.displacement;
+      const rightBulgeX = this.rightCheekSpring.lateralX;
+
+      for (const bone of this.leftCheekBones) {
+        const rest = this.boneRestTransforms.get(bone);
+        if (rest) {
+          bone.position.x = rest.position.x + leftBulgeX * 0.35;
+          bone.position.y = rest.position.y; // Strictly locked in-place vertically
+          bone.position.z = rest.position.z + leftDispZ;
+        }
+      }
+
+      for (const bone of this.rightCheekBones) {
+        const rest = this.boneRestTransforms.get(bone);
+        if (rest) {
+          bone.position.x = rest.position.x - rightBulgeX * 0.35;
+          bone.position.y = rest.position.y; // Strictly locked in-place vertically
+          bone.position.z = rest.position.z + rightDispZ;
+        }
+      }
+    }
+
+    // 3. Head cheek-poke subtle tilt (sweet lateral tilt away from poke, zero vertical lift)
     if (this.headBone && hasHeadMotion) {
-      this.headBone.rotation.z += this.headSquishSpring.velocity * 0.025;
+      this.headBone.rotation.z += this.headSquishSpring.velocity * 0.02;
     }
 
     this.mesh.skeleton.update();

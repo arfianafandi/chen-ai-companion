@@ -203,7 +203,7 @@ export class InteractionManager {
         if (hitPoint.y > 19.2) detectedPart = 'head';
         else if (hitPoint.y > 17.5) detectedPart = 'cheek';
         // Only classify as chest if ray hits the front breast protrusion (not shoulders, ribs, collar, or belly)
-        else if (hitPoint.y >= 14.8 && hitPoint.y <= 16.9 && Math.abs(hitPoint.x) <= 1.35 && hitPoint.z >= 0.55) {
+        else if (hitPoint.y >= 14.6 && hitPoint.y <= 17.1 && Math.abs(hitPoint.x) <= 1.45 && hitPoint.z >= 0.25) {
           detectedPart = 'chest';
         }
         else if (hitPoint.y > 9.0 && Math.abs(hitPoint.x) > 1.8) detectedPart = 'hand';
