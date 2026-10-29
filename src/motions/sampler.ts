@@ -48,9 +48,7 @@ export class StructuredMotionPlayer {
   private readonly scratchQ0 = new THREE.Quaternion();
   private readonly scratchQ1 = new THREE.Quaternion();
   private readonly scratchTargetQ = new THREE.Quaternion();
-  private readonly scratchBlendQ = new THREE.Quaternion();
   private readonly scratchPos = new THREE.Vector3();
-  private readonly scratchBlendPos = new THREE.Vector3();
 
   /**
    * Initializes bone cache from the mesh skeleton.
@@ -143,11 +141,11 @@ export class StructuredMotionPlayer {
         this.boneHintIndices.clear();
         this.morphHintIndices.clear();
       } else {
-        // Clamp time at motion duration so last keyframe (exact rest pose) continues evaluating
         this.currentTime = duration;
-        if (this.targetWeight > 0) {
-          this.stop(this.blendDuration);
-        }
+        this.isPlaying = false;
+        this.activeMotion = null;
+        this.onCompleteCallback?.();
+        return;
       }
     }
 
@@ -162,22 +160,14 @@ export class StructuredMotionPlayer {
       const cache = this.boneMap.get(boneName);
       if (!cache) continue;
 
+      // If user look-at tracking is enabled, let procedural lookAt control head/neck
+      if (this.allowLookAt && cache.isHeadOrNeck) continue;
+
       // Sample keyframe position & rotation
       this.sampleBoneTrack(boneName, keyframes, t);
 
       const bone = cache.bone;
       const rest = cache.restPosition;
-
-      // If gaze tracking is enabled, combine look-at with keyframe head/neck tilts (e.g. waifu head tilt & nodding)
-      if (this.allowLookAt && cache.isHeadOrNeck) {
-        if (this.weight >= 0.999) {
-          bone.quaternion.multiply(this.scratchTargetQ);
-        } else {
-          this.scratchBlendQ.copy(cache.restQuaternion).slerp(this.scratchTargetQ, this.weight);
-          bone.quaternion.multiply(this.scratchBlendQ);
-        }
-        continue;
-      }
 
       // Coordinate space mapping (MMD left-handed raw -> Three.js skeleton):
       // X = rest.x + posX
@@ -188,11 +178,8 @@ export class StructuredMotionPlayer {
         bone.quaternion.copy(this.scratchTargetQ);
         bone.position.copy(this.scratchPos);
       } else {
-        // Smoothly blend from true rest transform to target keyframe transform
-        this.scratchBlendQ.copy(cache.restQuaternion).slerp(this.scratchTargetQ, this.weight);
-        bone.quaternion.copy(this.scratchBlendQ);
-        this.scratchBlendPos.copy(rest).lerp(this.scratchPos, this.weight);
-        bone.position.copy(this.scratchBlendPos);
+        bone.quaternion.slerp(this.scratchTargetQ, this.weight);
+        bone.position.lerp(this.scratchPos, this.weight);
       }
     }
 
