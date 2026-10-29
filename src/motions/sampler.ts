@@ -181,13 +181,8 @@ export class StructuredMotionPlayer {
           this.boneHintIndices.clear();
           this.morphHintIndices.clear();
         } else {
-          // Reached end of non-looping motion: gracefully complete at the resting pose
-          this.currentTime = duration;
-          this.isPlaying = false;
-          this.activeMotion = null;
-          this.isBlendingOut = false;
-          this.weight = 0.0;
-          this.onCompleteCallback?.();
+          // Reached end of non-looping motion: gracefully blend back to resting pose (zero abrupt freeze!)
+          this.stop(this.blendDuration || 0.35);
           return;
         }
       }

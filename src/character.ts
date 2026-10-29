@@ -41,10 +41,11 @@ export class ChenCharacter {
   public isDancing = false;
   public currentDanceId: string | null = null;
   public danceTime = 0;
+  public currentDanceDuration = 0;
   public danceTransitionState: 'none' | 'blend_in' | 'dancing' | 'blend_out' = 'none';
   private danceTransitionTimer = 0;
   private readonly DANCE_BLEND_IN_DURATION = 0.4;
-  private readonly DANCE_BLEND_OUT_DURATION = 0.5;
+  private readonly DANCE_BLEND_OUT_DURATION = 0.35;
   private preDanceSnapshot = new Map<THREE.Bone, BoneSnapshot>();
   private exitDanceSnapshot = new Map<THREE.Bone, BoneSnapshot>();
   private boneRestTransforms = new Map<THREE.Bone, BoneSnapshot>();
@@ -605,12 +606,16 @@ export class ChenCharacter {
       this.isDancing = true;
       this.currentDanceId = danceId;
       this.danceTime = 0;
+      const maxFrame = (anim as any)?.animation?.metadata?.maxFrame ?? (anim as any)?.metadata?.maxFrame ?? 0;
+      this.currentDanceDuration = maxFrame > 0 ? (maxFrame / 30) : 0;
       this.danceTransitionState = 'blend_in';
       this.danceTransitionTimer = 0;
 
       // 5. Start audio in perfect sync with dance start
       await danceAudio.play(audioUrl, () => {
-        this.stopDance();
+        if (this.isDancing && this.danceTransitionState !== 'blend_out') {
+          this.stopDance();
+        }
       });
     } catch (err) {
       console.error('Failed to play dance:', err);
@@ -643,7 +648,7 @@ export class ChenCharacter {
     if (!this.isDancing) return;
 
     if (immediate || this.danceTransitionState === 'blend_out') {
-      this.finishStopDance();
+      if (immediate) this.finishStopDance();
       return;
     }
 
@@ -677,6 +682,7 @@ export class ChenCharacter {
     this.danceTransitionState = 'none';
     this.currentDanceId = null;
     this.danceTime = 0;
+    this.currentDanceDuration = 0;
     this.lastPhysicsTime = 0;
     danceAudio.stop();
 
@@ -1100,7 +1106,10 @@ export class ChenCharacter {
         this.danceTime += clampedDelta;
         this.model.update(this.danceTime, { physics: this.physicsEnabled, ik: true });
 
-        if (this.danceTransitionState === 'blend_in') {
+        // Seamless auto-transition to blend_out the instant dance animation finishes (zero freeze delay!)
+        if (this.currentDanceDuration > 0 && this.danceTime >= this.currentDanceDuration) {
+          this.stopDance();
+        } else if (this.danceTransitionState === 'blend_in') {
           this.danceTransitionTimer += clampedDelta;
           const progress = Math.min(1.0, this.danceTransitionTimer / this.DANCE_BLEND_IN_DURATION);
           const alpha = smootherstep(progress);
