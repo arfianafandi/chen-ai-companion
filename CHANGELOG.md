@@ -4,6 +4,30 @@ Dokumen ini mencatat setiap permintaan, analisis teknis, modifikasi kode, hasil 
 
 ---
 
+## 📅 [2026-10-30 09:05 WIB] — Implementasi Fase 2: Dressing Room, Cuaca Dinamis & Hembusan Angin Virtual
+- **Instruksi User**: *"lanjutkan pengembangan lainnya"* (Mengeksekusi Roadmap Fase 2).
+- **Fitur Baru & Implementasi**:
+  - **Dressing Room (Ruang Ganti)**:
+    - 4 Palet warna kostum: Endfield Standard, Talos Snowfield, Cyberpunk Midnight, Sakura Ceremony.
+    - 3 Pilihan finish: Anime Cel-Shaded, Glossy Armor Sheen, Cyber Hologram Ghost.
+  - **Cuaca Dinamis & Jam Lokal**:
+    - 4 Cuaca atmosfer: Cerah Talos-II, Hujan Cyber Neon, Salju Beku Talos, Debu Kristal Originium.
+    - Sinkronisasi waktu otomatis (Siang, Senja, Malam Cyber, Aurora Talos) yang mengikuti jam perangkat.
+  - **Simulator Hembusan Angin**:
+    - Tombol *Trigger Gust* dan hembusan sepoi-sepoi dinamis yang menggerakkan rambut dan gaun Chen dengan audio angin alami Web Audio.
+- **Verifikasi**: `tsc && vite build` lolos 0 error.
+
+---
+
+## 📅 [2026-10-30 08:41 WIB] — Edukasi & Dokumentasi Arsitektur Streaming LLM
+- **Pertanyaan User**: *"sistem streaming llm itu apa?"*
+- **Dokumentasi & Konsep**:
+  - Penjelasan komparasi arsitektur tradisional (*buffered response*) vs *token streaming* (*Server-Sent Events* / SSE).
+  - Pembahasan keuntungan latensi awal rendah ($<300$ms), *live typing*, dan *pipelined sentence audio synthesis* pada sistem Chen AI Companion.
+  - Dicatat di `development-log.md` dan disinkronkan ke repositori.
+
+---
+
 ## 📅 [2026-10-30 00:26 WIB] — Implementasi Opsi A: Streaming LLM & Pipelined Neural Voice Lip-Sync
 - **Pilihan User**: *"A"* (Integrasi Streaming LLM & Suara Neural Dinamis — Fase 1 Roadmap).
 - **Implementasi**:

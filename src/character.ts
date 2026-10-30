@@ -7,7 +7,7 @@ import {
   type ThreeMmdAnimation 
 } from '@yohawing/three-mmd-loader';
 import type { EmotionType, BodyPart } from './types';
-import { tts, chenVoice, danceAudio } from './audio';
+import { tts, chenVoice, danceAudio, sfx } from './audio';
 import type { TrainedMotion, MotionPoseData } from './motionTrainer';
 
 import { 
@@ -207,6 +207,18 @@ export class ChenCharacter {
   private targetMorphWeights: Record<string, number> = {};
   private currentMorphWeights: Record<string, number> = {};
 
+  // Virtual Atmospheric Wind System
+  public windStrength: number = 0.35;
+  public windDirection: THREE.Vector3 = new THREE.Vector3(1, 0, 0.4).normalize();
+  private windTimer: number = 0;
+  private gustStrength: number = 0;
+  private gustTime: number = 0;
+
+  // Dressing Room & Costume Palettes
+  public currentPalette: 'endfield' | 'snowfield' | 'cyber_crimson' | 'sakura' = 'endfield';
+  public currentFinish: 'anime' | 'glossy' | 'hologram' = 'anime';
+  private originalMaterialsData: Map<THREE.Material, { color: THREE.Color; roughness?: number; metalness?: number; opacity?: number }> = new Map();
+
   // Lip sync vowel weights
   private lipSyncVowel: string = 'ん';
   private lipSyncIntensity: number = 0;
@@ -323,9 +335,19 @@ export class ChenCharacter {
         const mesh = child as THREE.Mesh;
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const mat of materials) {
-          if (mat && (mat as any).map) {
-            (mat as any).map.colorSpace = THREE.SRGBColorSpace;
-            (mat as any).map.needsUpdate = true;
+          if (mat) {
+            if (!this.originalMaterialsData.has(mat)) {
+              this.originalMaterialsData.set(mat, {
+                color: (mat as any).color ? (mat as any).color.clone() : new THREE.Color(0xffffff),
+                roughness: (mat as any).roughness,
+                metalness: (mat as any).metalness,
+                opacity: mat.opacity,
+              });
+            }
+            if ((mat as any).map) {
+              (mat as any).map.colorSpace = THREE.SRGBColorSpace;
+              (mat as any).map.needsUpdate = true;
+            }
           }
         }
       }
@@ -419,6 +441,105 @@ export class ChenCharacter {
     createHitSphere('hand', 1.5, new THREE.Vector3(-3.5, 12.0, 0.3));
     // Legs & Boots (y: 5.5)
     createHitSphere('leg', 2.0, new THREE.Vector3(0, 6.0, 0.3));
+  }
+
+  setCostumePalette(palette: 'endfield' | 'snowfield' | 'cyber_crimson' | 'sakura') {
+    this.currentPalette = palette;
+    if (!this.mesh) return;
+
+    const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
+
+    for (const mat of materials) {
+      if (!mat) continue;
+      const original = this.originalMaterialsData.get(mat);
+      if (!original) continue;
+
+      const matName = (mat.name || '').toLowerCase();
+      // Keep skin, face, eyes natural
+      const isSkinOrFace = matName.includes('face') || matName.includes('skin') || matName.includes('eye') || matName.includes('brow') || matName.includes('mouth') || matName.includes('head');
+
+      if (palette === 'endfield') {
+        if ((mat as any).color) (mat as any).color.copy(original.color);
+        if ((mat as any).emissive) (mat as any).emissive.setHex(0x000000);
+      } else if (palette === 'snowfield') {
+        if (!isSkinOrFace && (mat as any).color) {
+          if (matName.includes('hair')) {
+            (mat as any).color.setHex(0xd0e6f8);
+          } else if (matName.includes('blade') || matName.includes('weapon')) {
+            (mat as any).color.setHex(0xb5e8ff);
+          } else {
+            (mat as any).color.setHex(0xebf5fc);
+          }
+        }
+        if ((mat as any).emissive && !isSkinOrFace) {
+          (mat as any).emissive.setHex(0x0a2638);
+        }
+      } else if (palette === 'cyber_crimson') {
+        if (!isSkinOrFace && (mat as any).color) {
+          if (matName.includes('hair')) {
+            (mat as any).color.setHex(0x2a1520);
+          } else if (matName.includes('blade') || matName.includes('weapon')) {
+            (mat as any).color.setHex(0xff1744);
+          } else {
+            (mat as any).color.setHex(0x1a1a24);
+          }
+        }
+        if ((mat as any).emissive && !isSkinOrFace) {
+          (mat as any).emissive.setHex(0x550a18);
+        }
+      } else if (palette === 'sakura') {
+        if (!isSkinOrFace && (mat as any).color) {
+          if (matName.includes('hair')) {
+            (mat as any).color.setHex(0x3a2830);
+          } else if (matName.includes('blade') || matName.includes('weapon')) {
+            (mat as any).color.setHex(0xffd700);
+          } else {
+            (mat as any).color.setHex(0xffdde6);
+          }
+        }
+        if ((mat as any).emissive && !isSkinOrFace) {
+          (mat as any).emissive.setHex(0x38121f);
+        }
+      }
+      mat.needsUpdate = true;
+    }
+  }
+
+  setMaterialFinish(finish: 'anime' | 'glossy' | 'hologram') {
+    this.currentFinish = finish;
+    if (!this.mesh) return;
+
+    const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
+    for (const mat of materials) {
+      if (!mat) continue;
+      const original = this.originalMaterialsData.get(mat);
+
+      if (finish === 'anime') {
+        if ((mat as any).roughness !== undefined) (mat as any).roughness = original?.roughness ?? 0.5;
+        if ((mat as any).metalness !== undefined) (mat as any).metalness = original?.metalness ?? 0.1;
+        mat.transparent = false;
+        mat.opacity = 1.0;
+      } else if (finish === 'glossy') {
+        if ((mat as any).roughness !== undefined) (mat as any).roughness = 0.15;
+        if ((mat as any).metalness !== undefined) (mat as any).metalness = 0.45;
+        mat.transparent = false;
+        mat.opacity = 1.0;
+      } else if (finish === 'hologram') {
+        mat.transparent = true;
+        mat.opacity = 0.82;
+      }
+      mat.needsUpdate = true;
+    }
+  }
+
+  triggerWindGust(strength: number = 1.0) {
+    this.gustStrength = strength;
+    this.gustTime = 0;
+    sfx.playWindBreeze();
+    this.applyMorphWeight('ウィンク', 0.4);
+    setTimeout(() => {
+      this.applyMorphWeight('ウィンク', 0);
+    }, 450);
   }
 
   setEmotion(emotion: EmotionType) {
@@ -1507,6 +1628,24 @@ export class ChenCharacter {
       this.headBone.rotation.y = THREE.MathUtils.lerp(this.headBone.rotation.y, clampedYaw * 0.65, delta * 4);
       this.headBone.rotation.x = THREE.MathUtils.lerp(this.headBone.rotation.x, clampedPitch * 0.65, delta * 4);
       this.headBone.rotation.z = THREE.MathUtils.lerp(this.headBone.rotation.z, gestureHeadRoll * 0.7, delta * 4);
+
+      // 5b. Atmospheric Wind Sway on Head & Neck (Hair & ribbons flutter naturally via Bullet physics)
+      if (this.windStrength > 0 || this.gustStrength > 0) {
+        this.windTimer += delta * 2.2;
+        const gustDecay = Math.max(0, 1 - this.gustTime / 1.6);
+        this.gustTime += delta;
+        const effectiveWind = this.windStrength + this.gustStrength * gustDecay;
+        const windWave = Math.sin(this.windTimer) * 0.7 + Math.sin(this.windTimer * 2.3) * 0.3;
+        const swayZ = windWave * effectiveWind * 0.045 * this.windDirection.x;
+        const swayX = Math.cos(this.windTimer * 1.6) * effectiveWind * 0.035 * this.windDirection.z;
+
+        if (this.neckBone) {
+          this.neckBone.rotation.z += swayZ * 0.4;
+          this.neckBone.rotation.x += swayX * 0.4;
+        }
+        this.headBone.rotation.z += swayZ * 0.8;
+        this.headBone.rotation.x += swayX * 0.8;
+      }
     }
   }
 

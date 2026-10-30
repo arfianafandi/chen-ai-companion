@@ -133,6 +133,39 @@ class SoundFX {
       });
     } catch {}
   }
+
+  // Gentle soothing wind breeze whoosh
+  playWindBreeze() {
+    try {
+      const ctx = this.initCtx();
+      const bufferSize = Math.floor(ctx.sampleRate * 1.2);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.4;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(220, ctx.currentTime);
+      filter.frequency.linearRampToValueAtTime(680, ctx.currentTime + 0.4);
+      filter.frequency.linearRampToValueAtTime(160, ctx.currentTime + 1.2);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.35);
+      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      noise.start();
+      noise.stop(ctx.currentTime + 1.2);
+    } catch {}
+  }
 }
 
 export const sfx = new SoundFX();

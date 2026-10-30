@@ -200,6 +200,65 @@ export class UIManager {
         </div>
 
         <div class="drawer-section">
+          <h4>👗 DRESSING ROOM (PALET & FINISH)</h4>
+          <div class="option-row">
+            <span>Tema Warna Kostum:</span>
+            <select id="costume-palette-select">
+              <option value="endfield">⚡ Endfield Standard (Amber & Black)</option>
+              <option value="snowfield">❄️ Talos Snowfield (Frost White & Cyan)</option>
+              <option value="cyber_crimson">🔥 Cyberpunk Midnight (Obsidian & Crimson)</option>
+              <option value="sakura">🌸 Sakura Ceremony (Pearl Pink & Gold)</option>
+            </select>
+          </div>
+          <div class="option-row">
+            <span>Tekstur & Shading:</span>
+            <select id="material-finish-select">
+              <option value="anime">✨ Anime Cel-Shaded (Default Tajam)</option>
+              <option value="glossy">💎 Glossy Tactical Armor (Kilau Armor)</option>
+              <option value="hologram">🌌 Cyber Hologram Ghost (Semi-Transparan)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="drawer-section">
+          <h4>🌦️ CUACA & WAKTU DINAMIS</h4>
+          <div class="option-row">
+            <span>Kondisi Cuaca:</span>
+            <select id="weather-select">
+              <option value="clear">☀️ Cerah Talos-II (Amber Dust)</option>
+              <option value="rain">🌧️ Hujan Cyber Neon (Fast Streaks)</option>
+              <option value="snow">❄️ Salju Beku Talos (Snowflakes)</option>
+              <option value="originium">🌌 Debu Kristal Originium (Embers)</option>
+            </select>
+          </div>
+          <div class="option-row">
+            <span>Waktu Panggung:</span>
+            <select id="time-of-day-select">
+              <option value="auto">⏰ Otomatis (Sinkron Jam Lokal)</option>
+              <option value="day">🌅 Siang Cerah (Bright Daylight)</option>
+              <option value="sunset">🌇 Senja Keemasan (Sunset Glow)</option>
+              <option value="night">🌙 Malam Cyber (Midnight Neon)</option>
+              <option value="aurora">🌌 Aurora Talos (Mystic Aurora)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="drawer-section">
+          <h4>🍃 SIMULATOR ANGIN VIRTUAL</h4>
+          <div class="option-row">
+            <span>Intensitas Sepoi:</span>
+            <select id="wind-strength-select">
+              <option value="0.35">🍃 Angin Sepoi Alami (Default)</option>
+              <option value="0.85">💨 Angin Kencang Terbuka (Strong Breeze)</option>
+              <option value="0.0">⏸️ Tenang / Tanpa Angin (Calm)</option>
+            </select>
+          </div>
+          <button class="action-submit-btn" id="trigger-wind-btn" style="width: 100%; margin-top: 6px; padding: 8px;">
+            💨 Hembus Angin ke Chen (Trigger Gust)
+          </button>
+        </div>
+
+        <div class="drawer-section">
           <h4>🌆 ENVIRONMENT & LIGHTING</h4>
           <div class="option-row">
             <span>Backdrop Preset:</span>
@@ -911,6 +970,60 @@ export class UIManager {
           this.showSpeechBubble('Halo, Administrator! Senang bertemu denganmu~ [EMOTE:happy]', 'happy');
         }
       });
+    });
+
+    // 9c. Dressing Room, Dynamic Weather & Virtual Wind Controls
+    const paletteSelect = this.container.querySelector('#costume-palette-select') as HTMLSelectElement;
+    paletteSelect?.addEventListener('change', () => {
+      sfx.playClick();
+      const val = paletteSelect.value as any;
+      this.chen.setCostumePalette(val);
+      const names: Record<string, string> = {
+        endfield: 'Endfield Standard',
+        snowfield: 'Talos Snowfield',
+        cyber_crimson: 'Cyberpunk Midnight',
+        sakura: 'Sakura Ceremony',
+      };
+      this.chen.setEmotion('smile');
+      this.showSpeechBubble(`Kostum diperbarui: Tema ${names[val] || val}! Bagus tidak, Administrator? [EMOTE:smile]`, 'smile');
+    });
+
+    const finishSelect = this.container.querySelector('#material-finish-select') as HTMLSelectElement;
+    finishSelect?.addEventListener('change', () => {
+      sfx.playClick();
+      this.chen.setMaterialFinish(finishSelect.value as any);
+    });
+
+    const weatherSelect = this.container.querySelector('#weather-select') as HTMLSelectElement;
+    weatherSelect?.addEventListener('change', () => {
+      sfx.playClick();
+      const val = weatherSelect.value as any;
+      this.sceneManager.setWeather(val);
+      const msgs: Record<string, string> = {
+        clear: 'Langit Talos-II kembali cerah, Administrator! [EMOTE:smile]',
+        rain: 'Hujan mulai turun... Berdirilah di dekatku agar tidak basah. [EMOTE:happy]',
+        snow: 'Salju turun dengan lembut di Talos-II... Dingin tapi indah. [EMOTE:blush]',
+        originium: 'Aktivitas partikel kristal Originium terdeteksi di udara. Tetap waspada! [EMOTE:serious]',
+      };
+      this.showSpeechBubble(msgs[val] || 'Cuaca diperbarui.', 'smile');
+    });
+
+    const timeOfDaySelect = this.container.querySelector('#time-of-day-select') as HTMLSelectElement;
+    timeOfDaySelect?.addEventListener('change', () => {
+      sfx.playClick();
+      this.sceneManager.setTimeOfDay(timeOfDaySelect.value as any);
+    });
+
+    const windSelect = this.container.querySelector('#wind-strength-select') as HTMLSelectElement;
+    windSelect?.addEventListener('change', () => {
+      sfx.playClick();
+      this.chen.windStrength = parseFloat(windSelect.value);
+    });
+
+    const windBtn = this.container.querySelector('#trigger-wind-btn') as HTMLButtonElement;
+    windBtn?.addEventListener('click', () => {
+      this.chen.triggerWindGust(1.2);
+      this.showSpeechBubble('Wah... angin di Talos-II berhembus cukup kencang! [EMOTE:surprised]', 'surprised', 4);
     });
 
     // 10. Background & Stage Controls
