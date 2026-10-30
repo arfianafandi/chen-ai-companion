@@ -200,27 +200,6 @@ export class UIManager {
         </div>
 
         <div class="drawer-section">
-          <h4>👗 DRESSING ROOM (PALET & FINISH)</h4>
-          <div class="option-row">
-            <span>Tema Warna Kostum:</span>
-            <select id="costume-palette-select">
-              <option value="endfield">⚡ Endfield Standard (Amber & Black)</option>
-              <option value="snowfield">❄️ Talos Snowfield (Frost White & Cyan)</option>
-              <option value="cyber_crimson">🔥 Cyberpunk Midnight (Obsidian & Crimson)</option>
-              <option value="sakura">🌸 Sakura Ceremony (Pearl Pink & Gold)</option>
-            </select>
-          </div>
-          <div class="option-row">
-            <span>Tekstur & Shading:</span>
-            <select id="material-finish-select">
-              <option value="anime">✨ Anime Cel-Shaded (Default Tajam)</option>
-              <option value="glossy">💎 Glossy Tactical Armor (Kilau Armor)</option>
-              <option value="hologram">🌌 Cyber Hologram Ghost (Semi-Transparan)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="drawer-section">
           <h4>🌦️ CUACA & WAKTU DINAMIS</h4>
           <div class="option-row">
             <span>Kondisi Cuaca:</span>
@@ -972,28 +951,7 @@ export class UIManager {
       });
     });
 
-    // 9c. Dressing Room, Dynamic Weather & Virtual Wind Controls
-    const paletteSelect = this.container.querySelector('#costume-palette-select') as HTMLSelectElement;
-    paletteSelect?.addEventListener('change', () => {
-      sfx.playClick();
-      const val = paletteSelect.value as any;
-      this.chen.setCostumePalette(val);
-      const names: Record<string, string> = {
-        endfield: 'Endfield Standard',
-        snowfield: 'Talos Snowfield',
-        cyber_crimson: 'Cyberpunk Midnight',
-        sakura: 'Sakura Ceremony',
-      };
-      this.chen.setEmotion('smile');
-      this.showSpeechBubble(`Kostum diperbarui: Tema ${names[val] || val}! Bagus tidak, Administrator? [EMOTE:smile]`, 'smile');
-    });
-
-    const finishSelect = this.container.querySelector('#material-finish-select') as HTMLSelectElement;
-    finishSelect?.addEventListener('change', () => {
-      sfx.playClick();
-      this.chen.setMaterialFinish(finishSelect.value as any);
-    });
-
+    // 9c. Dynamic Weather & Virtual Wind Controls
     const weatherSelect = this.container.querySelector('#weather-select') as HTMLSelectElement;
     weatherSelect?.addEventListener('change', () => {
       sfx.playClick();

@@ -4,6 +4,16 @@ Dokumen ini mencatat setiap permintaan, analisis teknis, modifikasi kode, hasil 
 
 ---
 
+## 📅 [2026-10-30 09:52 WIB] — Penghapusan Fitur Ganti Kostum (Dressing Room)
+- **Instruksi User**: *"hapus saja bagian ganti kostumnya"*
+- **Pembersihan Kode**:
+  - `src/ui.ts`: Menghapus seksi Dressing Room dan dropdown palet/finish dari menu Studio Drawer.
+  - `src/character.ts`: Menghapus logic tinting material `setCostumePalette` & `setMaterialFinish`, memulihkan material original Chen tanpa modifikasi.
+  - Mempertahankan sistem cuaca dinamis 4 mode, waktu otomatis, dan hembusan angin virtual.
+- **Verifikasi**: `tsc && vite build` lolos 0 error.
+
+---
+
 ## 📅 [2026-10-30 09:05 WIB] — Implementasi Fase 2: Dressing Room, Cuaca Dinamis & Hembusan Angin Virtual
 - **Instruksi User**: *"lanjutkan pengembangan lainnya"* (Mengeksekusi Roadmap Fase 2).
 - **Fitur Baru & Implementasi**:

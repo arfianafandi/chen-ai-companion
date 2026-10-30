@@ -214,11 +214,6 @@ export class ChenCharacter {
   private gustStrength: number = 0;
   private gustTime: number = 0;
 
-  // Dressing Room & Costume Palettes
-  public currentPalette: 'endfield' | 'snowfield' | 'cyber_crimson' | 'sakura' = 'endfield';
-  public currentFinish: 'anime' | 'glossy' | 'hologram' = 'anime';
-  private originalMaterialsData: Map<THREE.Material, { color: THREE.Color; roughness?: number; metalness?: number; opacity?: number }> = new Map();
-
   // Lip sync vowel weights
   private lipSyncVowel: string = 'ん';
   private lipSyncIntensity: number = 0;
@@ -335,19 +330,9 @@ export class ChenCharacter {
         const mesh = child as THREE.Mesh;
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const mat of materials) {
-          if (mat) {
-            if (!this.originalMaterialsData.has(mat)) {
-              this.originalMaterialsData.set(mat, {
-                color: (mat as any).color ? (mat as any).color.clone() : new THREE.Color(0xffffff),
-                roughness: (mat as any).roughness,
-                metalness: (mat as any).metalness,
-                opacity: mat.opacity,
-              });
-            }
-            if ((mat as any).map) {
-              (mat as any).map.colorSpace = THREE.SRGBColorSpace;
-              (mat as any).map.needsUpdate = true;
-            }
+          if (mat && (mat as any).map) {
+            (mat as any).map.colorSpace = THREE.SRGBColorSpace;
+            (mat as any).map.needsUpdate = true;
           }
         }
       }
@@ -441,95 +426,6 @@ export class ChenCharacter {
     createHitSphere('hand', 1.5, new THREE.Vector3(-3.5, 12.0, 0.3));
     // Legs & Boots (y: 5.5)
     createHitSphere('leg', 2.0, new THREE.Vector3(0, 6.0, 0.3));
-  }
-
-  setCostumePalette(palette: 'endfield' | 'snowfield' | 'cyber_crimson' | 'sakura') {
-    this.currentPalette = palette;
-    if (!this.mesh) return;
-
-    const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
-
-    for (const mat of materials) {
-      if (!mat) continue;
-      const original = this.originalMaterialsData.get(mat);
-      if (!original) continue;
-
-      const matName = (mat.name || '').toLowerCase();
-      // Keep skin, face, eyes natural
-      const isSkinOrFace = matName.includes('face') || matName.includes('skin') || matName.includes('eye') || matName.includes('brow') || matName.includes('mouth') || matName.includes('head');
-
-      if (palette === 'endfield') {
-        if ((mat as any).color) (mat as any).color.copy(original.color);
-        if ((mat as any).emissive) (mat as any).emissive.setHex(0x000000);
-      } else if (palette === 'snowfield') {
-        if (!isSkinOrFace && (mat as any).color) {
-          if (matName.includes('hair')) {
-            (mat as any).color.setHex(0xd0e6f8);
-          } else if (matName.includes('blade') || matName.includes('weapon')) {
-            (mat as any).color.setHex(0xb5e8ff);
-          } else {
-            (mat as any).color.setHex(0xebf5fc);
-          }
-        }
-        if ((mat as any).emissive && !isSkinOrFace) {
-          (mat as any).emissive.setHex(0x0a2638);
-        }
-      } else if (palette === 'cyber_crimson') {
-        if (!isSkinOrFace && (mat as any).color) {
-          if (matName.includes('hair')) {
-            (mat as any).color.setHex(0x2a1520);
-          } else if (matName.includes('blade') || matName.includes('weapon')) {
-            (mat as any).color.setHex(0xff1744);
-          } else {
-            (mat as any).color.setHex(0x1a1a24);
-          }
-        }
-        if ((mat as any).emissive && !isSkinOrFace) {
-          (mat as any).emissive.setHex(0x550a18);
-        }
-      } else if (palette === 'sakura') {
-        if (!isSkinOrFace && (mat as any).color) {
-          if (matName.includes('hair')) {
-            (mat as any).color.setHex(0x3a2830);
-          } else if (matName.includes('blade') || matName.includes('weapon')) {
-            (mat as any).color.setHex(0xffd700);
-          } else {
-            (mat as any).color.setHex(0xffdde6);
-          }
-        }
-        if ((mat as any).emissive && !isSkinOrFace) {
-          (mat as any).emissive.setHex(0x38121f);
-        }
-      }
-      mat.needsUpdate = true;
-    }
-  }
-
-  setMaterialFinish(finish: 'anime' | 'glossy' | 'hologram') {
-    this.currentFinish = finish;
-    if (!this.mesh) return;
-
-    const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
-    for (const mat of materials) {
-      if (!mat) continue;
-      const original = this.originalMaterialsData.get(mat);
-
-      if (finish === 'anime') {
-        if ((mat as any).roughness !== undefined) (mat as any).roughness = original?.roughness ?? 0.5;
-        if ((mat as any).metalness !== undefined) (mat as any).metalness = original?.metalness ?? 0.1;
-        mat.transparent = false;
-        mat.opacity = 1.0;
-      } else if (finish === 'glossy') {
-        if ((mat as any).roughness !== undefined) (mat as any).roughness = 0.15;
-        if ((mat as any).metalness !== undefined) (mat as any).metalness = 0.45;
-        mat.transparent = false;
-        mat.opacity = 1.0;
-      } else if (finish === 'hologram') {
-        mat.transparent = true;
-        mat.opacity = 0.82;
-      }
-      mat.needsUpdate = true;
-    }
   }
 
   triggerWindGust(strength: number = 1.0) {
